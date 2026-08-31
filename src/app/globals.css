@@ -1,0 +1,25 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* design.md: glass panels need a vibrant, layered background behind them or
+   the frosted effect has nothing to show through. Kept subtle at rest,
+   verified for 4.5:1 text contrast per design.md's own checklist. */
+body {
+  color: #f5f6f8;
+  background-color: #14161a; /* off-black, never pure #000 (design.md) */
+  background-image:
+    radial-gradient(circle at 15% 20%, rgba(0, 128, 255, 0.35), transparent 40%),
+    radial-gradient(circle at 85% 15%, rgba(139, 0, 255, 0.30), transparent 45%),
+    radial-gradient(circle at 50% 90%, rgba(32, 178, 170, 0.25), transparent 45%);
+  background-attachment: fixed;
+  min-height: 100dvh;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

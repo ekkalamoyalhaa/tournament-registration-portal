@@ -1,0 +1,32 @@
+# Local development only. Postgres runs in Docker; the Next.js app itself
+# runs on your host with `npm run dev` so hot reload stays fast.
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: tournament
+      POSTGRES_PASSWORD: tournament
+      POSTGRES_DB: tournament_portal
+    ports:
+      - "5432:5432"
+    volumes:
+      - tournament_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tournament -d tournament_portal"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Optional: browse the database at http://localhost:8080
+  adminer:
+    image: adminer:latest
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  tournament_db_data:
