@@ -242,6 +242,31 @@ export async function resubmitRegistrationById(registrationId: string) {
 
 /* ---------- phase 2: officials ---------- */
 
+export async function saveManagerInfo(formData: FormData) {
+  const { registration } = await getOrCreateDraftRegistration();
+
+  if (registration.phase !== 'PHASE_2') {
+    throw new Error('Manager information can only be edited in Phase 2');
+  }
+
+  const updated = await prisma.teamRegistration.update({
+    where: { id: registration.id },
+    data: {
+      managerName: (formData.get('managerName') as string) || null,
+      managerPosition: (formData.get('managerPosition') as string) || null,
+      managerEmail: (formData.get('managerEmail') as string) || null,
+      managerPhone: (formData.get('managerPhone') as string) || null,
+      managerCountry: (formData.get('managerCountry') as string) || null,
+      assistantManagerName:
+        (formData.get('assistantManagerName') as string) || null,
+    },
+  });
+
+  revalidatePath('/team/register/manager');
+
+  return { success: true, registration: updated };
+}
+
 export async function saveOfficialsInfo(formData: FormData) {
   const { registration } = await getOrCreateDraftRegistration();
 
