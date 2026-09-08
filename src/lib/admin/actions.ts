@@ -19,21 +19,7 @@ async function assertAdmin() {
 export async function getAdminStats() {
   await assertAdmin();
 
-  const [totalTeams, pendingPhase1, pendingPhase2, approved, changesRequested, rejected, totalPlayers, totalDocs] =
-    await Promise.all([
-      prisma.teamRegistration.count(),
-      prisma.teamRegistration.count({ where: { phase: 'PHASE_1', status: 'SUBMITTED' } }),
-      prisma.teamRegistration.count({
-        where: { phase: 'PHASE_2', status: { in: ['SUBMITTED', 'UNDER_REVIEW', 'RESUBMITTED'] } },
-      }),
-      prisma.teamRegistration.count({ where: { status: 'APPROVED' } }),
-      prisma.teamRegistration.count({ where: { status: 'CHANGES_REQUESTED' } }),
-      prisma.teamRegistration.count({ where: { status: 'REJECTED' } }),
-      prisma.player.count(),
-      prisma.playerDocument.count(),
-    ]);
-
-  return {
+  const [
     totalTeams,
     pendingPhase1,
     pendingPhase2,
@@ -41,8 +27,90 @@ export async function getAdminStats() {
     changesRequested,
     rejected,
     totalPlayers,
+    approvedPlayers,
+    pendingPlayers,
+    playerChangesRequested,
     totalDocs,
+    tournament,
+  ] = await Promise.all([
+    prisma.teamRegistration.count(),
+    prisma.teamRegistration.count({ where: { phase: 'PHASE_1', status: 'SUBMITTED' } }),
+    prisma.teamRegistration.count({
+      where: { phase: 'PHASE_2', status: { in: ['SUBMITTED', 'UNDER_REVIEW', 'RESUBMITTED'] } },
+    }),
+    prisma.teamRegistration.count({ where: { status: 'APPROVED' } }),
+    prisma.teamRegistration.count({ where: { status: 'CHANGES_REQUESTED' } }),
+    prisma.teamRegistration.count({ where: { status: 'REJECTED' } }),
+    prisma.player.count(),
+    prisma.player.count({ where: { status: 'APPROVED' } }),
+    prisma.player.count({ where: { status: { in: ['SUBMITTED', 'UNDER_REVIEW'] } } }),
+    prisma.player.count({ where: { status: 'CHANGES_REQUESTED' } }),
+    prisma.playerDocument.count(),
+    prisma.tournament.findFirst({ orderBy: { createdAt: 'desc' } }),
+  ]);
+
+  return {
+    totalTeams,
+    pendingPhase1,
+    pendingPhase2,
+    pendingTeams: pendingPhase1 + pendingPhase2,
+    approved,
+    changesRequested,
+    rejected,
+    totalPlayers,
+    approvedPlayers,
+    pendingPlayers,
+    playerChangesRequested,
+    totalDocs,
+    tournamentName: tournament?.name ?? 'Tournament',
   };
+}
+
+/* ---------- dashboard: pending review lists + activity feed ---------- */
+
+export async function getPendingTeamReviews(limit = 5) {
+  await assertAdmin();
+
+  return prisma.teamRegistration.findMany({
+    where: {
+      OR: [
+        { phase: 'PHASE_1', status: 'SUBMITTED' },
+        { phase: 'PHASE_2', status: { in: ['SUBMITTED', 'UNDER_REVIEW', 'RESUBMITTED'] } },
+      ],
+    },
+    include: { team: true },
+    orderBy: { updatedAt: 'desc' },
+    take: limit,
+  });
+}
+
+export async function getPendingPlayerReviews(limit = 5) {
+  await assertAdmin();
+
+  return prisma.player.findMany({
+    where: { status: { in: ['SUBMITTED', 'UNDER_REVIEW'] } },
+    include: { team: true },
+    orderBy: { updatedAt: 'desc' },
+    take: limit,
+  });
+}
+
+export async function getRecentActivity(limit = 8) {
+  await assertAdmin();
+
+  const events = await prisma.registrationEvent.findMany({
+    orderBy: { createdAt: 'desc' },
+    take: limit,
+    include: { teamRegistration: { include: { team: true } } },
+  });
+
+  return events.map((e: (typeof events)[number]) => ({
+    id: e.id,
+    teamName: e.teamRegistration.team.name,
+    toStatus: e.toStatus,
+    note: e.note,
+    createdAt: e.createdAt,
+  }));
 }
 
 /* ---------- team list ---------- */

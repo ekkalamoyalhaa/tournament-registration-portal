@@ -31,8 +31,8 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={`dark ${spaceGrotesk.variable} ${jakarta.variable} ${jetbrains.variable}`}>
-      <body className="bg-surface text-on-surface font-sans antialiased min-h-screen">
-        {children}
+      <body className="text-on-surface font-sans antialiased min-h-screen">
+        <div className="relative z-10">{children}</div>
       </body>
     </html>
   );

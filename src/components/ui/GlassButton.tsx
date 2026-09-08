@@ -7,7 +7,7 @@ interface GlassButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 
 export function GlassButton({ variant = 'primary', className, ...props }: GlassButtonProps) {
   const base =
-    'rounded-lg px-5 py-3 font-display text-label-lg transition-all duration-200 active:translate-y-px disabled:pointer-events-none disabled:opacity-40';
+    'inline-flex w-fit items-center justify-center gap-2 rounded-lg px-5 py-3 font-display text-label-lg transition-all duration-200 active:translate-y-px disabled:pointer-events-none disabled:opacity-40';
   const variants = {
     primary:
       'bg-gold text-forest font-semibold hover:bg-gold-deep shadow-glow-gold',

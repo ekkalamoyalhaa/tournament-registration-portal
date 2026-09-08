@@ -9,11 +9,25 @@
   }
 
   body {
-    background-color: #00180d;
+    position: relative;
+    background-color: #061911;
     background-image:
-      radial-gradient(circle at top right, rgba(217, 160, 67, 0.05), transparent 40%),
-      radial-gradient(circle at bottom left, rgba(24, 76, 55, 0.35), transparent 45%);
+      radial-gradient(circle at 85% 15%, rgba(229, 184, 75, 0.14) 0%, transparent 45%),
+      radial-gradient(circle at 15% 50%, rgba(20, 61, 43, 0.6) 0%, transparent 60%),
+      linear-gradient(160deg, #0a2419 0%, #061911 50%, #030d09 100%);
     background-attachment: fixed;
+  }
+
+  /* Micro-grain dither overlay — kills gradient banding on 8-bit displays */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 1;
+    opacity: 0.035;
+    mix-blend-mode: overlay;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
   }
 
   ::selection {

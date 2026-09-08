@@ -19,7 +19,7 @@ export function AdminSidebar({ userName, role }: { userName: string; role: strin
       <div>
         <div className="px-6 py-8 flex flex-col gap-1">
           <h1 className="font-sans text-headline-md font-bold text-on-surface tracking-tight">Tournament</h1>
-          <p className="font-mono text-label-sm text-outline uppercase tracking-widest">ADMIN PORTAL</p>
+          <p className="font-mono text-label-sm text-primary-container uppercase tracking-widest">ADMIN PORTAL</p>
         </div>
         <nav className="mt-4 flex flex-col gap-1 px-3">
           {navItems.map((item) => {

@@ -153,7 +153,7 @@ export default function AdminTeamReviewPage({ params }: { params: { id: string }
       {tab === 'overview' && (
         <div className="mt-6 space-y-6">
           <GlassCard>
-            <h2 className="font-sans text-title-lg font-bold text-on-surface">Team information</h2>
+            <h2 className="font-sans text-headline-sm font-bold text-white">Team information</h2>
             <dl className="mt-4 grid grid-cols-2 gap-4">
               <div>
                 <dt className="font-mono text-label-sm text-outline">Name</dt>
@@ -192,7 +192,7 @@ export default function AdminTeamReviewPage({ params }: { params: { id: string }
 
           {isPhase1 && (
             <GlassCard>
-              <h2 className="font-sans text-title-lg font-bold text-on-surface">Slot approval</h2>
+              <h2 className="font-sans text-headline-sm font-bold text-white">Slot approval</h2>
               <p className="mt-2 font-sans text-body-md text-outline">
                 Review institution eligibility before approving this team for Phase 2.
               </p>
@@ -211,7 +211,7 @@ export default function AdminTeamReviewPage({ params }: { params: { id: string }
                   disabled={actionLoading}
                   className="border-green-500/30 bg-green-500/10 text-green-400 hover:bg-green-500/20"
                 >
-                  <CheckCircle size={14} className="mr-1" /> Approve slot
+                  <CheckCircle size={14} /> Approve slot
                 </GlassButton>
               </div>
               <div className="mt-4 border-t border-white/10 pt-4">
@@ -227,7 +227,7 @@ export default function AdminTeamReviewPage({ params }: { params: { id: string }
                   disabled={actionLoading || !rejectReason}
                   className="mt-3 border-error/30 bg-error/10 text-error hover:bg-error/20"
                 >
-                  <XCircle size={14} className="mr-1" /> Reject slot
+                  <XCircle size={14} /> Reject slot
                 </GlassButton>
               </div>
             </GlassCard>
@@ -235,7 +235,7 @@ export default function AdminTeamReviewPage({ params }: { params: { id: string }
 
           {isPhase2 && (
             <GlassCard>
-              <h2 className="font-sans text-title-lg font-bold text-on-surface">Officials</h2>
+              <h2 className="font-sans text-headline-sm font-bold text-white">Officials</h2>
               <dl className="mt-4 grid grid-cols-2 gap-4">
                 <div>
                   <dt className="font-mono text-label-sm text-outline">Manager</dt>
@@ -259,7 +259,7 @@ export default function AdminTeamReviewPage({ params }: { params: { id: string }
 
           {isPhase2 && (
             <GlassCard>
-              <h2 className="font-sans text-title-lg font-bold text-on-surface">Final review actions</h2>
+              <h2 className="font-sans text-headline-sm font-bold text-white">Final review actions</h2>
               <textarea
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
@@ -273,7 +273,7 @@ export default function AdminTeamReviewPage({ params }: { params: { id: string }
                   disabled={actionLoading}
                   className="border-green-500/30 bg-green-500/10 text-green-400 hover:bg-green-500/20"
                 >
-                  <CheckCircle size={14} className="mr-1" /> Approve
+                  <CheckCircle size={14} /> Approve
                 </GlassButton>
                 <GlassButton
                   type="button"
@@ -281,7 +281,7 @@ export default function AdminTeamReviewPage({ params }: { params: { id: string }
                   disabled={actionLoading}
                   className="border-tertiary/30 bg-tertiary/10 text-tertiary hover:bg-tertiary/20"
                 >
-                  <AlertTriangle size={14} className="mr-1" /> Request changes
+                  <AlertTriangle size={14} /> Request changes
                 </GlassButton>
                 <GlassButton
                   type="button"
@@ -289,7 +289,7 @@ export default function AdminTeamReviewPage({ params }: { params: { id: string }
                   disabled={actionLoading}
                   className="border-error/30 bg-error/10 text-error hover:bg-error/20"
                 >
-                  <XCircle size={14} className="mr-1" /> Reject
+                  <XCircle size={14} /> Reject
                 </GlassButton>
               </div>
             </GlassCard>
@@ -363,7 +363,6 @@ export default function AdminTeamReviewPage({ params }: { params: { id: string }
                 type="button"
                 variant="ghost"
                 onClick={() => viewDocument(d.id)}
-                className="flex items-center gap-1"
               >
                 <Eye size={14} /> View
               </GlassButton>
