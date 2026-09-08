@@ -1,5 +1,5 @@
 // Tournament Registration Portal — data model
-// Reflects PRD sections 6, 19, 20, 30, 31.
+// Reflects PRD sections 6, 19, 20, 30, 31 + Gaafu Phase 1/2, Division, Institution, Officials
 
 generator client {
   provider = "prisma-client-js"
@@ -56,6 +56,23 @@ enum AnnouncementStatus {
 enum DocumentVisibility {
   PUBLIC
   PRIVATE
+}
+
+// Gaafu additions
+enum InstitutionType {
+  UNIVERSITY
+  COLLEGE
+  HIGHER_EDUCATION_INSTITUTE
+}
+
+enum Division {
+  MENS
+  WOMENS
+}
+
+enum RegistrationPhase {
+  PHASE_1
+  PHASE_2
 }
 
 // ---------- Identity ----------
@@ -145,14 +162,13 @@ model Tournament {
   @@map("tournaments")
 }
 
-// Configurable per-tournament requirements (PRD §13, §14)
 model TournamentRequirement {
   id           String     @id @default(uuid())
   tournamentId String
-  fieldKey     String     // e.g. "player.dateOfBirth", "document.passport"
+  fieldKey     String
   fieldLabel   String
   isRequired   Boolean    @default(true)
-  category     String     // "player_field" | "document"
+  category     String
 
   tournament Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
 
@@ -189,6 +205,7 @@ model Team {
   socialMedia       String?
   description       String?
   logoStorageKey    String?
+  institutionType   InstitutionType?
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
@@ -204,7 +221,7 @@ model TeamMembership {
   id       String   @id @default(uuid())
   userId   String
   teamId   String
-  role     GlobalRole @default(TEAM_MANAGER) // TEAM_MANAGER or TEAM_STAFF
+  role     GlobalRole @default(TEAM_MANAGER)
   invitedAt DateTime @default(now())
   acceptedAt DateTime?
 
@@ -215,21 +232,58 @@ model TeamMembership {
   @@map("team_members")
 }
 
-// One TeamRegistration per team-per-tournament — this is the record that moves
-// through the DRAFT -> SUBMITTED -> ... -> APPROVED/REJECTED state machine.
 model TeamRegistration {
   id             String              @id @default(uuid())
   teamId         String
   tournamentId   String
   status         RegistrationStatus  @default(DRAFT)
+  phase          RegistrationPhase   @default(PHASE_1)
+  division       Division?
+  managerIdNumber     String?
+  coachIdNumber       String?
+  medicIdNumber       String?
+  officialIdNumber    String?
+
+  // Slot approval
+  slotApprovedAt      DateTime?
+  slotApprovedBy      String?
+  slotRejectionReason String?
+
+  // Manager
   managerName    String?
   managerPosition String?
   managerEmail   String?
   managerPhone   String?
   managerCountry String?
+  managerPhotoKey     String?
+  managerIdDocKey     String?
+
+  // Assistant manager (legacy)
   assistantManagerName  String?
   assistantManagerEmail String?
   assistantManagerPhone String?
+
+  // Coach
+  coachName       String?
+  coachEmail      String?
+  coachPhone      String?
+  coachPhotoKey   String?
+  coachIdDocKey   String?
+
+  // Medic
+  medicName       String?
+  medicEmail      String?
+  medicPhone      String?
+  medicPhotoKey   String?
+  medicIdDocKey   String?
+
+  // Additional Official
+  officialName       String?
+  officialEmail      String?
+  officialPhone      String?
+  officialPhotoKey   String?
+  officialIdDocKey   String?
+
   submittedAt    DateTime?
   reviewedAt     DateTime?
   approvedAt     DateTime?
@@ -245,8 +299,6 @@ model TeamRegistration {
   @@map("team_registrations")
 }
 
-// Append-only history of status transitions for a registration (feeds §26 Audit Log
-// and the team-facing "Activity" tab in §23).
 model RegistrationEvent {
   id                  String   @id @default(uuid())
   teamRegistrationId  String
@@ -268,7 +320,7 @@ model TeamDocument {
   originalFilename String
   mimeType         String
   size             Int
-  visibility       DocumentVisibility @default(PUBLIC) // logos are public; other team docs may be private
+  visibility       DocumentVisibility @default(PUBLIC)
   createdAt        DateTime @default(now())
 
   team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
@@ -290,8 +342,8 @@ model Player {
   countryOfResidence    String?
   gender                String?
   jerseyNumber          Int?
-  position              String?      // GOALKEEPER | DEFENDER | MIDFIELDER | FORWARD
-  height                Int?         // cm
+  position              String?
+  height                Int?
   phone                 String?
   email                 String?
   emergencyContact      String?
@@ -307,18 +359,19 @@ model Player {
 }
 
 model PlayerDocument {
-  id               String   @id @default(uuid())
-  playerId         String
-  documentType     String   // "passport" | "photo" | "eligibility" | "medical" | "consent" | ...
-  storageKey       String   @unique
-  originalFilename String
-  mimeType         String
-  size             Int
-  visibility       DocumentVisibility @default(PRIVATE)
-  changeRequestNote String?  // set when admin requests a replacement (§25)
-  createdAt        DateTime @default(now())
+  id                String   @id @default(uuid())
+  playerId          String?
+  officialRole      String?
+  documentType      String
+  storageKey        String   @unique
+  originalFilename  String
+  mimeType          String
+  size              Int
+  visibility        DocumentVisibility @default(PRIVATE)
+  changeRequestNote String?
+  createdAt         DateTime @default(now())
 
-  player Player @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  player Player? @relation(fields: [playerId], references: [id], onDelete: Cascade)
 
   @@map("player_documents")
 }
@@ -337,7 +390,7 @@ model Fixture {
   teamBId      String?
   scoreA       Int?
   scoreB       Int?
-  status       String     @default("SCHEDULED") // SCHEDULED | LIVE | COMPLETED | POSTPONED
+  status       String     @default("SCHEDULED")
   isPublished  Boolean    @default(false)
 
   tournament Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
@@ -365,7 +418,7 @@ model Announcement {
 model AuditLog {
   id           String   @id @default(uuid())
   userId       String?
-  action       String   // e.g. "team.approved", "document.uploaded"
+  action       String
   resourceType String
   resourceId   String
   previousState Json?
@@ -382,12 +435,22 @@ model AuditLog {
 model Notification {
   id        String   @id @default(uuid())
   userId    String
-  type      String   // "registration.approved", "player.changes_requested", ...
-  channel   String   @default("email") // email | sms | whatsapp (future)
+  type      String
+  channel   String   @default("email")
   payload   Json?
   sentAt    DateTime?
   readAt    DateTime?
   createdAt DateTime @default(now())
 
   @@map("notifications")
+}
+
+model VerificationToken {
+  id        String   @id @default(cuid())
+  email     String
+  token     String   @unique
+  expires   DateTime
+  createdAt DateTime @default(now())
+
+  @@index([email])
 }

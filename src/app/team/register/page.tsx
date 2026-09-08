@@ -1,40 +1,169 @@
 import Link from 'next/link';
-import { GlassCard } from '@/components/ui/GlassCard';
-import { GlassButton } from '@/components/ui/GlassButton';
-import { WizardSteps } from '@/components/registration/WizardSteps';
-import { FormField as Field } from '@/components/ui/FormField';
+import { redirect } from 'next/navigation';
+import { SignOutButton } from '@/components/auth/SignOutButton';
+import { getOrCreateDraftRegistration, saveAndSubmitPhase1 } from '@/lib/registration/actions';
 
-// Step 3 of the wizard (Team information, PRD §9) shown as the representative
-// screen. Steps 1-2 (account/verify) and 4-7 follow the same shell.
-export default function TeamRegistrationPage() {
+export default async function TeamRegistrationPage() {
+  const { team, registration } = await getOrCreateDraftRegistration();
+
+  if (registration.phase !== 'PHASE_1') {
+    redirect('/team/dashboard');
+  }
+
+  async function handleSubmit(formData: FormData) {
+    'use server';
+    const result = await saveAndSubmitPhase1(formData);
+    if (result.error) {
+      redirect('/team/register?error=' + encodeURIComponent(result.error));
+    }
+    redirect('/team/dashboard');
+  }
+
   return (
-    <main className="mx-auto max-w-2xl px-6 py-section">
-      <WizardSteps currentStep={3} />
+    <main className="flex min-h-screen w-full flex-col items-center justify-center p-margin-mobile py-stack-lg md:p-margin-desktop">
+      <div className="mx-auto w-full max-w-4xl">
+        {/* Sign out */}
+        <div className="mb-stack-lg flex justify-end">
+          <SignOutButton />
+        </div>
 
-      <GlassCard className="mt-8">
-        <h1 className="text-h1 font-bold">Team information</h1>
-        <p className="mt-2 text-small text-white/60">
-          You can save this as a draft and come back before the registration deadline.
-        </p>
+        {/* Page Header */}
+        <div className="mb-stack-lg">
+          <p className="mb-2 font-label-md text-label-md text-primary-fixed-dim">
+            Tournament Participation
+          </p>
+          <h2 className="mb-stack-sm font-display-lg text-display-lg text-on-surface">
+            Team information
+          </h2>
+          <p className="max-w-2xl font-body-lg text-body-lg text-on-surface-variant">
+            Submit your team details for slot approval. You cannot add players until your slot is approved.
+          </p>
+        </div>
 
-        <form className="mt-8 space-y-6">
-          <Field label="Club or team name" name="name" required />
-          <Field label="Short name" name="shortName" hint="Shown on fixtures and standings" />
-          <div className="grid grid-cols-2 gap-6">
-            <Field label="Country" name="country" required />
-            <Field label="City" name="city" />
-          </div>
-          <Field label="Contact email" name="contactEmail" type="email" required />
-          <Field label="Contact phone" name="contactPhone" type="tel" />
+        {/* Registration Form Card */}
+        <div className="glass-card relative overflow-hidden rounded-xl p-container-padding">
+          {/* Subtle top glow */}
+          <div className="absolute left-0 right-0 top-0 h-[1px] bg-gradient-to-r from-transparent via-primary-container/50 to-transparent" />
 
-          <div className="flex justify-between border-t border-glass-border pt-6">
-            <GlassButton type="button" variant="ghost">Save draft</GlassButton>
-            <Link href="/team/register/manager">
-              <GlassButton type="button">Continue to manager</GlassButton>
-            </Link>
-          </div>
-        </form>
-      </GlassCard>
+          <form action={handleSubmit} className="space-y-stack-lg">
+            {/* Team Name */}
+            <div className="space-y-2">
+              <label className="block font-label-md text-label-md text-on-surface">
+                Club or team name <span className="text-error">*</span>
+              </label>
+              <input
+                name="name"
+                required
+                defaultValue={team.name ?? ''}
+                placeholder="Enter team name"
+                className="glass-input w-full rounded-lg px-4 py-3 font-body-md text-body-md text-on-surface placeholder:text-white/40"
+              />
+            </div>
+
+            {/* Institution & Division Row */}
+            <div className="grid grid-cols-1 gap-gutter md:grid-cols-2">
+              <div className="space-y-2">
+                <label className="block font-label-md text-label-md text-on-surface">
+                  Institution type <span className="text-error">*</span>
+                </label>
+                <div className="relative">
+                  <select
+                    name="institutionType"
+                    required
+                    defaultValue={team.institutionType ?? ''}
+                    className="glass-input w-full appearance-none rounded-lg px-4 py-3 pr-10 font-body-md text-body-md text-on-surface"
+                  >
+                    <option value="" disabled>Select institution type</option>
+                    <option value="UNIVERSITY">University</option>
+                    <option value="COLLEGE">College</option>
+                    <option value="HIGHER_EDUCATION_INSTITUTE">Higher Education Institute</option>
+                  </select>
+                  <svg
+                    className="pointer-events-none absolute right-3 top-1/2 h-5 w-5 -translate-y-1/2 text-on-surface-variant"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <label className="block font-label-md text-label-md text-on-surface">
+                  Division <span className="text-error">*</span>
+                </label>
+                <div className="relative">
+                  <select
+                    name="division"
+                    required
+                    defaultValue={registration.division ?? ''}
+                    className="glass-input w-full appearance-none rounded-lg px-4 py-3 pr-10 font-body-md text-body-md text-on-surface"
+                  >
+                    <option value="" disabled>Select division</option>
+                    <option value="MENS">Men&apos;s Division</option>
+                    <option value="WOMENS">Women&apos;s Division</option>
+                  </select>
+                  <svg
+                    className="pointer-events-none absolute right-3 top-1/2 h-5 w-5 -translate-y-1/2 text-on-surface-variant"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </div>
+              </div>
+            </div>
+
+            {/* Contact Row */}
+            <div className="grid grid-cols-1 gap-gutter md:grid-cols-2">
+              <div className="space-y-2">
+                <label className="block font-label-md text-label-md text-on-surface">
+                  Contact email <span className="text-error">*</span>
+                </label>
+                <input
+                  name="contactEmail"
+                  type="email"
+                  required
+                  defaultValue={team.contactEmail ?? ''}
+                  className="glass-input w-full rounded-lg px-4 py-3 font-body-md text-body-md text-on-surface placeholder:text-white/40"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="block font-label-md text-label-md text-on-surface">
+                  Contact phone
+                </label>
+                <input
+                  name="contactPhone"
+                  type="tel"
+                  defaultValue={team.contactPhone ?? ''}
+                  className="glass-input w-full rounded-lg px-4 py-3 font-body-md text-body-md text-on-surface placeholder:text-white/40"
+                />
+              </div>
+            </div>
+
+            {/* Divider */}
+            <div className="h-px w-full bg-white/5" />
+
+            {/* Single action */}
+            <div className="flex justify-end pt-4">
+              <button
+                type="submit"
+                className="btn-primary rounded-lg px-8 py-3 font-label-md text-label-md font-bold transition-all duration-300 hover:-translate-y-0.5"
+              >
+                Submit for slot approval
+              </button>
+            </div>
+          </form>
+        </div>
+
+        <div className="mt-6 text-center">
+          <Link href="/team/dashboard" className="font-body-md text-body-md text-primary-container hover:underline">
+            ← Back to dashboard
+          </Link>
+        </div>
+      </div>
     </main>
   );
 }

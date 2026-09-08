@@ -8,14 +8,16 @@ export function Tabs({ tabs }: { tabs: { label: string; content: ReactNode }[] }
 
   return (
     <div>
-      <div className="flex gap-1 border-b border-glass-border">
+      <div className="flex gap-1 border-b border-white/10">
         {tabs.map((tab, i) => (
           <button
             key={tab.label}
             onClick={() => setActive(i)}
             className={cn(
-              'px-4 py-3 text-small font-medium transition-colors',
-              i === active ? 'border-b-2 border-primary text-white' : 'text-white/50 hover:text-white/80'
+              'px-4 py-3 font-mono text-label-md font-medium uppercase tracking-wider transition-colors',
+              i === active
+                ? 'border-b-2 border-primary-container text-on-surface'
+                : 'text-outline hover:text-on-surface-variant'
             )}
           >
             {tab.label}

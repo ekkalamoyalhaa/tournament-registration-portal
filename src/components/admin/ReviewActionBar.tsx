@@ -3,9 +3,6 @@
 import { useState } from 'react';
 import { GlassButton } from '@/components/ui/GlassButton';
 
-// PRD §23/§24 — the three review actions available to admins on a team or a
-// player. "Request changes" opens a note field since a change request needs
-// to say what's wrong (PRD §25).
 export function ReviewActionBar({
   onApprove,
   onRequestChanges,
@@ -19,16 +16,16 @@ export function ReviewActionBar({
   const [note, setNote] = useState('');
 
   return (
-    <div className="rounded-control border border-glass-border bg-white/5 p-4">
+    <div className="glass-panel rounded-xl p-4">
       {showNoteField ? (
         <div className="space-y-3">
-          <label className="block text-small font-medium text-white/85">
+          <label className="block font-sans text-body-md font-medium text-on-surface">
             What needs to change?
             <textarea
               value={note}
               onChange={(e) => setNote(e.target.value)}
               rows={3}
-              className="mt-2 w-full rounded-control border border-glass-border bg-white/5 px-4 py-3 text-body text-white outline-none focus:border-primary focus:ring-2 focus:ring-primary/40"
+              className="mt-2 w-full rounded-lg border border-white/10 bg-white/[0.02] px-4 py-3 font-sans text-body-md text-on-surface outline-none placeholder:text-outline/50 focus:border-primary-container/50 focus:ring-1 focus:ring-primary-container/30"
               placeholder="e.g. The uploaded passport photo is unclear — please upload a clearer copy."
             />
           </label>
@@ -60,7 +57,7 @@ export function ReviewActionBar({
           <button
             type="button"
             onClick={onReject}
-            className="rounded-control border-[1.5px] border-tertiary px-5 py-3 font-semibold text-tertiary transition-all duration-200 hover:bg-tertiary/10"
+            className="rounded-lg border border-error px-5 py-3 font-sans text-body-md font-medium text-error transition-all duration-200 hover:bg-error/10"
           >
             Reject
           </button>

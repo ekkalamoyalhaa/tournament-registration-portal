@@ -1,64 +1,89 @@
 import type { Config } from 'tailwindcss';
 
-// Tokens transcribed from design.md ("Glassmorphism", v.alpha)
 const config: Config = {
   darkMode: 'class',
   content: ['./src/**/*.{ts,tsx}'],
   theme: {
     extend: {
       colors: {
-        // design.md front-matter colors
-        primary: '#0080FF', // Electric Blue
-        secondary: '#8B00FF', // Neon Purple
-        tertiary: '#FF1493', // Vivid Pink
-        neutral: '#20B2AA', // Teal
-        // surfaces — glass panels sit on a vibrant background, never pure black
-        ink: '#14161A', // off-black, not #000
-        glass: {
-          DEFAULT: 'rgba(255,255,255,0.15)',
-          light: 'rgba(255,255,255,0.30)',
-          dark: 'rgba(255,255,255,0.10)',
-          border: 'rgba(255,255,255,0.20)',
-        },
+        'tertiary-fixed': '#a5eff3',
+        'on-primary-container': '#006970',
+        'on-tertiary-fixed-variant': '#004f52',
+        'on-secondary': '#002d6d',
+        'inverse-surface': '#e2e2e8',
+        'tertiary': '#d6fdff',
+        'outline-variant': '#3b494b',
+        'primary-container': '#00f0ff',
+        'on-primary-fixed-variant': '#004f54',
+        'on-error-container': '#ffdad6',
+        'tertiary-container': '#9be6ea',
+        'surface-container-highest': '#333539',
+        'primary-fixed-dim': '#00dbe9',
+        'on-secondary': '#002d6d',
+        'secondary-container': '#548dff',
+        'background': '#111317',
+        'on-primary-fixed': '#002022',
+        'inverse-on-surface': '#2f3035',
+        'primary-fixed': '#7df4ff',
+        'surface-tint': '#00dbe9',
+        'surface-container': '#1e2024',
+        'surface-container-lowest': '#0c0e12',
+        'error-container': '#93000a',
+        'on-primary-container': '#006970',
+        'on-tertiary-container': '#11696d',
+        'secondary': '#afc6ff',
+        'error': '#ffb4ab',
+        'surface-bright': '#37393e',
+        'outline': '#849495',
+        'primary': '#dbfcff',
+        'on-primary': '#00363a',
+        'tertiary-fixed': '#a5eff3',
+        'on-secondary-fixed': '#001944',
+        'tertiary-fixed-dim': '#89d3d7',
+        'on-tertiary': '#003739',
+        'surface-container-low': '#1a1c20',
+        'secondary-fixed-dim': '#afc6ff',
+        'on-background': '#e2e2e8',
+        'on-surface-variant': '#b9cacb',
+        'secondary-fixed': '#d9e2ff',
+        'surface-variant': '#333539',
+        'inverse-primary': '#006970',
+        'on-error': '#690005',
+        'surface': '#111317',
+        'on-tertiary-fixed': '#002021',
+        'on-secondary-fixed-variant': '#00429a',
+        'on-surface': '#e2e2e8',
+        'on-secondary-container': '#002760',
+        'on-tertiary-fixed-variant': '#004f52',
+        'surface-container-high': '#282a2e',
+      },
+      borderRadius: { DEFAULT: '0.25rem', lg: '0.5rem', xl: '0.75rem', full: '9999px' },
+      spacing: {
+        gutter: '24px',
+        'margin-mobile': '16px',
+        'stack-md': '12px',
+        'stack-lg': '24px',
+        'margin-desktop': '40px',
+        'stack-sm': '4px',
+        'container-padding': '32px',
+        base: '8px',
       },
       fontFamily: {
-        sans: ['-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'sans-serif'],
-        mono: ['JetBrains Mono', 'ui-monospace', 'monospace'],
+        sans: ['var(--font-hanken)', 'system-ui', 'sans-serif'],
+        mono: ['var(--font-jetbrains)', 'ui-monospace', 'monospace'],
       },
       fontSize: {
-        hero: 'clamp(2.5rem, 5vw, 4rem)',
-        h1: '2.25rem',
-        h2: '1.5rem',
-        body: '1rem',
-        small: '0.875rem',
-        'label-caps': '0.75rem',
-      },
-      spacing: {
-        section: 'clamp(4rem, 8vw, 8rem)',
-      },
-      borderRadius: {
-        base: '4px',
-        control: '0.5rem', // buttons, cards
-      },
-      backdropBlur: {
-        glass: '16px', // within the 10-20px range from design.md
+        'headline-lg': ['32px', { lineHeight: '40px', letterSpacing: '-0.01em', fontWeight: '600' }],
+        'headline-md': ['24px', { lineHeight: '32px', fontWeight: '600' }],
+        'body-md': ['16px', { lineHeight: '24px', fontWeight: '400' }],
+        'body-lg': ['18px', { lineHeight: '28px', fontWeight: '400' }],
+        'label-md': ['14px', { lineHeight: '20px', letterSpacing: '0.05em', fontWeight: '500' }],
+        'label-sm': ['12px', { lineHeight: '16px', fontWeight: '500' }],
+        'headline-lg-mobile': ['28px', { lineHeight: '36px', fontWeight: '600' }],
+        'display-lg': ['48px', { lineHeight: '56px', letterSpacing: '-0.02em', fontWeight: '700' }],
       },
       boxShadow: {
-        card: '0 2px 12px rgba(0,0,0,0.06)',
-        lift: '0 8px 24px rgba(0,0,0,0.12)',
-      },
-      transitionDuration: {
-        DEFAULT: '250ms',
-      },
-      zIndex: {
-        base: '0',
-        'sticky-nav': '100',
-        overlay: '200',
-        modal: '300',
-        toast: '500',
-      },
-      maxWidth: {
-        container: '1280px',
+        'glow-primary': '0 0 15px rgba(0, 240, 255, 0.3)',
       },
     },
   },

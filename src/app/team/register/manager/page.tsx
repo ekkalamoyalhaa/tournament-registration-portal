@@ -1,47 +1,55 @@
 import Link from 'next/link';
+import { redirect } from 'next/navigation';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { GlassButton } from '@/components/ui/GlassButton';
 import { WizardSteps } from '@/components/registration/WizardSteps';
-import { FormField as Field } from '@/components/ui/FormField';
+import { FormField } from '@/components/ui/FormField';
+import { getOrCreateDraftRegistration, saveManagerInfo } from '@/lib/registration/actions';
 
-// PRD §11 — team manager + optional assistant manager.
-export default function ManagerInfoPage() {
+export default async function ManagerInfoPage() {
+  const { registration } = await getOrCreateDraftRegistration();
+
+  async function handleSubmit(formData: FormData) {
+    'use server';
+    await saveManagerInfo(formData);
+    redirect('/team/register/players');
+  }
+
   return (
-    <main className="mx-auto max-w-2xl px-6 py-section">
+    <main className="mx-auto max-w-2xl px-[16px] md:px-[40px] py-[32px]">
       <WizardSteps currentStep={4} />
 
       <GlassCard className="mt-8">
-        <h1 className="text-h1 font-bold">Manager information</h1>
-        <p className="mt-2 text-small text-white/60">
+        <h1 className="font-sans text-headline-lg font-bold text-on-surface tracking-tight">
+          Manager information
+        </h1>
+        <p className="mt-2 font-sans text-body-md text-outline">
           The manager is the main point of contact for this team&apos;s registration.
         </p>
 
-        <form className="mt-8 space-y-6">
+        <form action={handleSubmit} className="mt-8 space-y-6">
           <div className="grid grid-cols-2 gap-6">
-            <Field label="Full name" name="managerName" required />
-            <Field label="Position" name="managerPosition" />
+            <FormField label="Full name" name="managerName" required defaultValue={registration.managerName ?? ''} />
+            <FormField label="Position" name="managerPosition" defaultValue={registration.managerPosition ?? ''} />
           </div>
           <div className="grid grid-cols-2 gap-6">
-            <Field label="Email" name="managerEmail" type="email" required />
-            <Field label="Phone" name="managerPhone" type="tel" />
+            <FormField label="Email" name="managerEmail" type="email" required defaultValue={registration.managerEmail ?? ''} />
+            <FormField label="Phone" name="managerPhone" type="tel" defaultValue={registration.managerPhone ?? ''} />
           </div>
-          <Field label="Country" name="managerCountry" />
+          <FormField label="Country" name="managerCountry" defaultValue={registration.managerCountry ?? ''} />
 
-          <div className="border-t border-glass-border pt-6">
-            <p className="text-small font-medium text-white/85">Assistant manager (optional)</p>
+          <div className="border-t border-white/10 pt-6">
+            <p className="font-sans text-body-md font-medium text-on-surface">Assistant manager (optional)</p>
             <div className="mt-4 grid grid-cols-2 gap-6">
-              <Field label="Full name" name="assistantManagerName" />
-              <Field label="Email" name="assistantManagerEmail" type="email" />
+              <FormField label="Full name" name="assistantManagerName" defaultValue={registration.assistantManagerName ?? ''} />
             </div>
           </div>
 
-          <div className="flex justify-between border-t border-glass-border pt-6">
+          <div className="flex justify-between border-t border-white/10 pt-6">
             <Link href="/team/register">
               <GlassButton type="button" variant="ghost">Back</GlassButton>
             </Link>
-            <Link href="/team/register/players">
-              <GlassButton type="button">Continue to players</GlassButton>
-            </Link>
+            <GlassButton type="submit">Continue to players</GlassButton>
           </div>
         </form>
       </GlassCard>

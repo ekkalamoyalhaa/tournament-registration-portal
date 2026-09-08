@@ -10,9 +10,9 @@ interface FormFieldProps {
 export function FormField({ label, name, type = 'text', required, hint, defaultValue }: FormFieldProps) {
   return (
     <label className="block" htmlFor={name}>
-      <span className="text-small font-medium text-white/85">
+      <span className="font-sans text-body-md font-medium text-on-surface">
         {label}
-        {required && <span className="text-tertiary"> *</span>}
+        {required && <span className="text-error"> *</span>}
       </span>
       <input
         id={name}
@@ -20,9 +20,9 @@ export function FormField({ label, name, type = 'text', required, hint, defaultV
         type={type}
         required={required}
         defaultValue={defaultValue}
-        className="mt-2 w-full rounded-control border border-glass-border bg-white/5 px-4 py-3 text-body text-white outline-none placeholder:text-white/30 focus:border-primary focus:ring-2 focus:ring-primary/40"
+        className="mt-2 w-full rounded-lg border border-white/10 bg-white/[0.02] px-4 py-3 font-sans text-body-md text-on-surface outline-none placeholder:text-outline/50 focus:border-primary-container/50 focus:ring-1 focus:ring-primary-container/30"
       />
-      {hint && <span className="mt-1 block text-small text-white/50">{hint}</span>}
+      {hint && <span className="mt-1 block font-sans text-body-md text-outline">{hint}</span>}
     </label>
   );
 }

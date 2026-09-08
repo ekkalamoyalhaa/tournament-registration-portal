@@ -1,55 +1,51 @@
-import { randomUUID } from 'crypto';
+const ALLOWED_DOCUMENTS = new Set(['application/pdf', 'image/png', 'image/jpeg']);
+const ALLOWED_LOGOS = new Set(['image/png', 'image/jpeg', 'image/webp']);
 
-// PRD §18: never trust filename extension, Content-Type header, or client-side
-// validation alone. This does MIME + size + extension allow-listing; pair it
-// with a magic-byte / file-signature check and malware scanning in production.
+const MAX_DOCUMENT_BYTES = 10 * 1024 * 1024;
+const MAX_LOGO_BYTES = 5 * 1024 * 1024;
 
-const ALLOWED_IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp']);
-const ALLOWED_DOCUMENT_TYPES = new Set([
-  'application/pdf',
-  'image/png',
-  'image/jpeg',
-]);
+const SIGNATURES: Record<string, number[]> = {
+  'image/png': [0x89, 0x50, 0x4e, 0x47],
+  'image/jpeg': [0xff, 0xd8, 0xff],
+  'image/webp': [0x52, 0x49, 0x46, 0x46],
+  'application/pdf': [0x25, 0x50, 0x44, 0x46],
+};
 
-const MAX_IMAGE_BYTES = 5 * 1024 * 1024; // 5MB
-const MAX_DOCUMENT_BYTES = 15 * 1024 * 1024; // 15MB
-
-export type UploadKind = 'team-logo' | 'player-photo' | 'player-document';
-
-export interface UploadValidationInput {
-  kind: UploadKind;
+export function validateUpload({
+  kind,
+  mimeType,
+  size,
+  buffer,
+}: {
+  kind: 'logo' | 'document';
   mimeType: string;
   size: number;
-}
-
-export function validateUploadRequest({ kind, mimeType, size }: UploadValidationInput) {
-  const isImageKind = kind === 'team-logo' || kind === 'player-photo';
-  const allowed = isImageKind ? ALLOWED_IMAGE_TYPES : ALLOWED_DOCUMENT_TYPES;
-  const maxBytes = isImageKind ? MAX_IMAGE_BYTES : MAX_DOCUMENT_BYTES;
+  buffer?: Buffer;
+}) {
+  const allowed = kind === 'logo' ? ALLOWED_LOGOS : ALLOWED_DOCUMENTS;
+  const max = kind === 'logo' ? MAX_LOGO_BYTES : MAX_DOCUMENT_BYTES;
 
   if (!allowed.has(mimeType)) {
-    throw new Error(`Unsupported file type for ${kind}: ${mimeType}`);
+    return { valid: false, error: `Type ${mimeType} not allowed for ${kind}` };
   }
-  if (size <= 0 || size > maxBytes) {
-    throw new Error(`File size out of range for ${kind}: ${size} bytes`);
+  if (size > max) {
+    return { valid: false, error: `File exceeds ${max / 1024 / 1024} MB` };
   }
+  if (buffer && buffer.length > 0) {
+    const sig = SIGNATURES[mimeType];
+    if (sig && !sig.every((byte, i) => buffer[i] === byte)) {
+      return { valid: false, error: 'File signature mismatch' };
+    }
+  }
+  return { valid: true };
 }
 
-// PRD §40: never derive the object key from the original filename.
-// tournaments/{tournamentId}/teams/{teamId}/players/{playerId}/documents/{uuid}.ext
-export function buildStorageKey(params: {
-  tournamentId: string;
-  teamId: string;
-  playerId?: string;
-  category: 'logos' | 'documents' | 'player-photos';
-  extension: string;
-}) {
-  const { tournamentId, teamId, playerId, category, extension } = params;
-  const uuid = randomUUID();
-  const safeExt = extension.replace(/[^a-z0-9]/gi, '').toLowerCase();
-
-  if (playerId) {
-    return `tournaments/${tournamentId}/teams/${teamId}/players/${playerId}/${category}/${uuid}.${safeExt}`;
-  }
-  return `tournaments/${tournamentId}/teams/${teamId}/${category}/${uuid}.${safeExt}`;
+export function extensionFromMime(mimeType: string): string {
+  const map: Record<string, string> = {
+    'image/png': 'png',
+    'image/jpeg': 'jpg',
+    'image/webp': 'webp',
+    'application/pdf': 'pdf',
+  };
+  return map[mimeType] || 'bin';
 }

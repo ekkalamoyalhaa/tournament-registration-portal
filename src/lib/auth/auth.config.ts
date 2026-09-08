@@ -1,35 +1,30 @@
-import type { NextAuthConfig } from 'next-auth';
-import Credentials from 'next-auth/providers/credentials';
 import { PrismaAdapter } from '@auth/prisma-adapter';
-import bcrypt from 'bcryptjs';
+import Credentials from 'next-auth/providers/credentials';
 import { prisma } from '@/lib/db/prisma';
+import bcrypt from 'bcryptjs';
+import { loginSchema } from '@/lib/validation/schemas/auth';
 
-// PRD §34 security baseline this config participates in: HTTP-only + Secure +
-// SameSite cookies (Auth.js defaults), password hashing (bcrypt), email
-// verification gate before submission (enforced in the registration service,
-// not here), and MFA for admins (TODO: add an authenticator provider before
-// the admin portal ships).
-export const authConfig: NextAuthConfig = {
+export const authConfig = {
   adapter: PrismaAdapter(prisma),
   session: { strategy: 'jwt' },
-  pages: {
-    signIn: '/login',
-  },
+  pages: { signIn: '/login' },
   providers: [
     Credentials({
+      name: 'credentials',
       credentials: {
         email: { label: 'Email', type: 'email' },
         password: { label: 'Password', type: 'password' },
       },
-      authorize: async (credentials) => {
-        const email = credentials?.email as string | undefined;
-        const password = credentials?.password as string | undefined;
-        if (!email || !password) return null;
+      async authorize(credentials) {
+        const parsed = loginSchema.safeParse(credentials);
+        if (!parsed.success) return null;
 
-        const user = await prisma.user.findUnique({ where: { email } });
-        if (!user) return null;
+        const user = await prisma.user.findUnique({
+          where: { email: parsed.data.email },
+        });
+        if (!user || !user.passwordHash) return null;
 
-        const valid = await bcrypt.compare(password, user.passwordHash);
+        const valid = await bcrypt.compare(parsed.data.password, user.passwordHash);
         if (!valid) return null;
 
         return {
@@ -37,22 +32,9 @@ export const authConfig: NextAuthConfig = {
           email: user.email,
           name: `${user.firstName} ${user.lastName}`,
           role: user.role,
+          emailVerified: !!user.emailVerifiedAt,
         };
       },
     }),
   ],
-  callbacks: {
-    jwt({ token, user }) {
-      if (user) {
-        token.role = (user as { role?: string }).role;
-      }
-      return token;
-    },
-    session({ session, token }) {
-      if (session.user) {
-        (session.user as { role?: string }).role = token.role as string | undefined;
-      }
-      return session;
-    },
-  },
 };
