@@ -1,11 +1,20 @@
 import { GetObjectCommand } from '@aws-sdk/client-s3';
-import { r2Client, R2_PRIVATE_BUCKET } from './client';
+import {
+  r2PrivateClient,
+  R2_PRIVATE_BUCKET,
+} from './client';
 
-// Server-side stream fetch, e.g. for building a ZIP export of documents.
-// For browser access, prefer createSignedDownloadUrl (signed-url.ts) instead.
-export async function getObjectStream(storageKey: string) {
-  const result = await r2Client.send(
-    new GetObjectCommand({ Bucket: R2_PRIVATE_BUCKET, Key: storageKey })
-  );
-  return result.Body;
+/**
+ * Server-side download of a private object.
+ *
+ * For browser downloads, prefer createSignedDownloadUrl()
+ * from signed-url.ts.
+ */
+export async function downloadObject(storageKey: string) {
+  const command = new GetObjectCommand({
+    Bucket: R2_PRIVATE_BUCKET,
+    Key: storageKey,
+  });
+
+  return r2PrivateClient.send(command);
 }

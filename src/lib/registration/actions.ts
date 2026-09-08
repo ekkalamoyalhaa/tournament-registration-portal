@@ -4,7 +4,9 @@ import { prisma } from '@/lib/db/prisma';
 import { auth } from '@/lib/auth/auth';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
-import { RegistrationStatus } from '@prisma/client';
+import { InstitutionType, Division, RegistrationStatus } from '@prisma/client';
+
+
 
 /* ---------- helpers ---------- */
 
@@ -104,12 +106,27 @@ export async function saveTeamInfo(formData: FormData) {
     throw new Error('Team info can only be edited in Phase 1');
   }
 
+  const institutionTypeValue = formData.get('institutionType');
+  const divisionValue = formData.get('division');
+
+  const institutionType =
+    institutionTypeValue === 'UNIVERSITY' ||
+    institutionTypeValue === 'COLLEGE' ||
+    institutionTypeValue === 'HIGHER_EDUCATION_INSTITUTE'
+      ? institutionTypeValue
+      : null;
+
+  const division =
+    divisionValue === 'MENS' || divisionValue === 'WOMENS'
+      ? divisionValue
+      : null;
+
   const updated = await prisma.team.update({
     where: { id: team.id },
     data: {
-      name: formData.get('name') as string,
+      name: (formData.get('name') as string) || '',
       shortName: (formData.get('shortName') as string) || null,
-      institutionType: (formData.get('institutionType') as string) || null,
+      institutionType: institutionType as InstitutionType | null,
       country: (formData.get('country') as string) || null,
       city: (formData.get('city') as string) || null,
       contactEmail: (formData.get('contactEmail') as string) || null,
@@ -120,13 +137,19 @@ export async function saveTeamInfo(formData: FormData) {
   await prisma.teamRegistration.update({
     where: { id: registration.id },
     data: {
-      division: (formData.get('division') as string) || null,
+      division: division as Division | null,
     },
   });
 
   revalidatePath('/team/register');
-  return { success: true, team: updated };
+
+  return {
+    success: true,
+    team: updated,
+  };
 }
+
+
 
 export async function submitPhase1() {
   const { registration } = await getOrCreateDraftRegistration();
