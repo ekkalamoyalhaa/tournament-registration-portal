@@ -9,22 +9,22 @@ export default async function PublicLayout({
   const session = await auth();
 
   return (
-    <div className="min-h-screen bg-surface text-on-surface font-sans bg-pattern selection:bg-primary-container/30 selection:text-on-primary-container">
-      <header className="flex items-center justify-between px-[40px] py-[24px] bg-transparent w-full z-50 absolute top-0">
-        <div className="flex items-center gap-[24px]">
-          <Link href="/" className="font-sans text-headline-md font-bold text-on-surface tracking-tight">
+    <div className="min-h-screen bg-surface text-on-surface font-sans bg-pattern">
+      <header className="flex items-center justify-between px-margin-mobile md:px-margin-desktop py-stack-lg bg-transparent w-full z-50 absolute top-0">
+        <div className="flex items-center gap-gutter">
+          <Link href="/" className="font-display text-headline-md font-bold text-white tracking-tight">
             Tournament
           </Link>
-          <nav className="hidden md:flex gap-[24px]">
+          <nav className="hidden md:flex gap-gutter">
             <Link
               href="/admin/teams"
-              className="text-on-surface-variant hover:text-primary-fixed-dim transition-opacity duration-200 pb-1 font-mono text-label-md"
+              className="text-on-surface-variant hover:text-gold transition-colors duration-200 pb-1 font-display text-label-md uppercase"
             >
               Teams
             </Link>
             <Link
               href="/fixtures"
-              className="text-on-surface-variant hover:text-primary-fixed-dim transition-opacity duration-200 pb-1 font-mono text-label-md"
+              className="text-on-surface-variant hover:text-gold transition-colors duration-200 pb-1 font-display text-label-md uppercase"
             >
               Fixtures
             </Link>
@@ -34,14 +34,14 @@ export default async function PublicLayout({
           {session?.user ? (
             <Link
               href="/team/dashboard"
-              className="text-on-surface-variant hover:text-primary-fixed-dim transition-opacity duration-200 font-mono text-label-md"
+              className="text-on-surface-variant hover:text-gold transition-colors duration-200 font-display text-label-md uppercase"
             >
               My Team
             </Link>
           ) : (
             <Link
               href="/login"
-              className="text-on-surface-variant hover:text-primary-fixed-dim transition-opacity duration-200 font-mono text-label-md"
+              className="text-on-surface-variant hover:text-gold transition-colors duration-200 font-display text-label-md uppercase"
             >
               Sign in
             </Link>

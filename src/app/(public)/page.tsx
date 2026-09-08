@@ -4,7 +4,7 @@ import { CalendarDays, MapPin, ArrowRight, ClipboardList, ListOrdered, ShieldChe
 
 export default async function HomePage() {
   const tournament = {
-    name: '2026 Island Championship',
+    name: 'IUMSU Beach Handball Fiesta 2026',
     startDate: '12 December',
     endDate: '20 December 2026',
     venue: 'National Stadium',
@@ -15,19 +15,19 @@ export default async function HomePage() {
   const totalSlots = 42;
 
   return (
-    <main className="pt-[120px] px-[16px] md:px-[40px] max-w-[1440px] mx-auto pb-[24px] min-h-screen flex flex-col justify-center">
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-[24px] mt-12 items-center">
+    <main className="pt-[120px] px-margin-mobile md:px-margin-desktop max-w-[1440px] mx-auto pb-stack-lg min-h-screen flex flex-col justify-center">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-gutter mt-12 items-center">
         {/* Left Column: Hero Content */}
-        <div className="lg:col-span-8 flex flex-col gap-[24px]">
-          <div className="flex flex-col gap-[4px]">
-            <p className="font-mono text-label-md text-on-surface-variant flex items-center gap-2">
-              <CalendarDays size={18} className="text-primary-container" />
+        <div className="lg:col-span-8 flex flex-col gap-stack-lg">
+          <div className="flex flex-col gap-stack-sm">
+            <p className="font-display text-label-md uppercase text-gold flex items-center gap-2">
+              <CalendarDays size={18} />
               {tournament.startDate} — {tournament.endDate}
               <span className="mx-2 opacity-30">|</span>
-              <MapPin size={18} className="text-primary-container" />
+              <MapPin size={18} />
               {tournament.venue}
             </p>
-            <h1 className="font-sans text-display-lg text-on-surface mt-2 tracking-tight">
+            <h1 className="font-display text-display-hero-mobile md:text-display-hero text-white mt-2">
               {tournament.name}
             </h1>
           </div>
@@ -35,17 +35,17 @@ export default async function HomePage() {
             Register your team, submit your player list, and track every step of review in one place.
             Registration closes {tournament.registrationDeadline}.
           </p>
-          <div className="flex flex-wrap gap-[12px] mt-4">
+          <div className="flex flex-wrap gap-stack-md mt-4">
             <Link
               href="/team/register"
-              className="bg-gradient-to-r from-primary-container to-primary-fixed-dim text-on-primary-container font-mono text-label-md px-6 py-3 rounded shadow-glow-primary hover:opacity-90 transition-opacity flex items-center gap-2 font-bold"
+              className="bg-gold text-forest font-display text-label-lg uppercase px-6 py-3 rounded-lg shadow-[0_0_24px_rgba(217,160,67,0.35)] hover:bg-gold-deep transition-colors flex items-center gap-2 font-semibold"
             >
               Register your team
               <ArrowRight size={18} />
             </Link>
             <Link
               href="/fixtures"
-              className="glass-panel text-primary-container font-mono text-label-md px-6 py-3 rounded hover:bg-white/5 transition-colors flex items-center gap-2"
+              className="glass-panel text-gold font-display text-label-lg uppercase px-6 py-3 rounded-lg hover:bg-white/5 transition-colors flex items-center gap-2"
             >
               View fixtures
               <CalendarDays size={18} />
@@ -55,27 +55,27 @@ export default async function HomePage() {
 
         {/* Right Column: Stats Card */}
         <div className="lg:col-span-4 mt-8 lg:mt-0">
-          <div className="glass-panel rounded-xl p-[32px] flex flex-col gap-[24px]">
-            <div className="grid grid-cols-2 gap-[24px]">
+          <div className="glass-panel rounded-xl p-container-padding flex flex-col gap-stack-lg">
+            <div className="grid grid-cols-2 gap-stack-lg">
               <div>
-                <p className="font-mono text-label-md text-on-surface-variant mb-1">Teams confirmed</p>
-                <p className="font-sans text-headline-lg text-primary-container">{teamCount}</p>
+                <p className="font-display text-label-md uppercase text-on-surface-variant mb-1">Teams confirmed</p>
+                <p className="font-display text-headline-lg text-gold">{teamCount}</p>
               </div>
               <div>
-                <p className="font-mono text-label-md text-on-surface-variant mb-1">Slots available</p>
-                <p className="font-sans text-headline-lg text-primary-container">{totalSlots - teamCount}</p>
+                <p className="font-display text-label-md uppercase text-on-surface-variant mb-1">Slots available</p>
+                <p className="font-display text-headline-lg text-gold">{totalSlots - teamCount}</p>
               </div>
             </div>
-            <div className="h-px w-full bg-white/10" />
+            <div className="h-px w-full bg-gold/20" />
             <div>
-              <p className="font-mono text-label-md text-on-surface-variant mb-1">Registration closes</p>
-              <p className="font-sans text-body-md text-on-surface">{tournament.registrationDeadline}</p>
+              <p className="font-display text-label-md uppercase text-on-surface-variant mb-1">Registration closes</p>
+              <p className="font-sans text-body-md text-white">{tournament.registrationDeadline}</p>
             </div>
             {/* Decorative Map Placeholder */}
-            <div className="w-full h-32 rounded border border-white/5 opacity-50 grayscale mt-2 overflow-hidden relative bg-surface-container-high">
-              <div className="absolute inset-0 bg-primary-container/10 mix-blend-overlay" />
+            <div className="w-full h-32 rounded-lg border border-gold/20 opacity-70 grayscale mt-2 overflow-hidden relative bg-forest-raised">
+              <div className="absolute inset-0 bg-gold/10 mix-blend-overlay" />
               <div className="absolute inset-0 flex items-center justify-center">
-                <MapPin size={32} className="text-outline/30" />
+                <MapPin size={32} className="text-outline/40" />
               </div>
             </div>
           </div>
@@ -83,48 +83,38 @@ export default async function HomePage() {
       </div>
 
       {/* Bottom Feature Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-[24px] mt-24">
-        {/* Feature 1 */}
-        <div className="glass-panel rounded-lg p-[32px] hover:bg-white/5 transition-colors group cursor-pointer relative overflow-hidden">
-          <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-primary-container/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-          <div className="flex items-center gap-3 mb-4">
-            <div className="w-8 h-8 rounded-full bg-surface-variant flex items-center justify-center text-primary-container border border-white/5">
-              <ClipboardList size={16} />
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-gutter mt-24">
+        {[
+          {
+            icon: <ClipboardList size={16} />,
+            title: 'Team registration',
+            body: 'A guided, multi-step process — save a draft and come back anytime before the deadline.',
+          },
+          {
+            icon: <ListOrdered size={16} />,
+            title: 'Fixtures',
+            body: 'Match schedules are published here as soon as they\u2019re confirmed by the organizers.',
+          },
+          {
+            icon: <ShieldCheck size={16} />,
+            title: 'Approved teams',
+            body: 'Once a registration clears review, the team appears on the public roster.',
+          },
+        ].map((feature) => (
+          <div
+            key={feature.title}
+            className="glass-panel rounded-lg p-container-padding hover:bg-white/5 transition-colors group cursor-pointer relative overflow-hidden"
+          >
+            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-gold/30 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-8 h-8 rounded-full bg-forest-raised flex items-center justify-center text-gold border border-gold/30">
+                {feature.icon}
+              </div>
+              <h3 className="font-display text-headline-md text-white">{feature.title}</h3>
             </div>
-            <h3 className="font-sans text-headline-md text-on-surface">Team registration</h3>
+            <p className="font-sans text-body-md text-on-surface-variant">{feature.body}</p>
           </div>
-          <p className="font-sans text-body-md text-on-surface-variant">
-            A guided, multi-step process — save a draft and come back anytime before the deadline.
-          </p>
-        </div>
-
-        {/* Feature 2 */}
-        <div className="glass-panel rounded-lg p-[32px] hover:bg-white/5 transition-colors group cursor-pointer relative overflow-hidden">
-          <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-primary-container/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-          <div className="flex items-center gap-3 mb-4">
-            <div className="w-8 h-8 rounded-full bg-surface-variant flex items-center justify-center text-primary-container border border-white/5">
-              <ListOrdered size={16} />
-            </div>
-            <h3 className="font-sans text-headline-md text-on-surface">Fixtures</h3>
-          </div>
-          <p className="font-sans text-body-md text-on-surface-variant">
-            Match schedules are published here as soon as they&apos;re confirmed by the organizers.
-          </p>
-        </div>
-
-        {/* Feature 3 */}
-        <div className="glass-panel rounded-lg p-[32px] hover:bg-white/5 transition-colors group cursor-pointer relative overflow-hidden">
-          <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-primary-container/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-          <div className="flex items-center gap-3 mb-4">
-            <div className="w-8 h-8 rounded-full bg-surface-variant flex items-center justify-center text-primary-container border border-white/5">
-              <ShieldCheck size={16} />
-            </div>
-            <h3 className="font-sans text-headline-md text-on-surface">Approved teams</h3>
-          </div>
-          <p className="font-sans text-body-md text-on-surface-variant">
-            Once a registration clears review, the team appears on the public roster.
-          </p>
-        </div>
+        ))}
       </div>
     </main>
   );

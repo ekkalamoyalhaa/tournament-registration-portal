@@ -1,12 +1,19 @@
-import { Hanken_Grotesk, JetBrains_Mono } from 'next/font/google';
+import { Space_Grotesk, Plus_Jakarta_Sans, JetBrains_Mono } from 'next/font/google';
 import type { Metadata } from 'next';
 import "./globals.css";
 
-const hanken = Hanken_Grotesk({
+const spaceGrotesk = Space_Grotesk({
   subsets: ['latin'],
-  variable: '--font-hanken',
+  variable: '--font-space-grotesk',
   display: 'swap',
-  weight: ['400', '600', '700'],
+  weight: ['500', '600', '700'],
+});
+
+const jakarta = Plus_Jakarta_Sans({
+  subsets: ['latin'],
+  variable: '--font-jakarta',
+  display: 'swap',
+  weight: ['400', '500', '600', '700'],
 });
 
 const jetbrains = JetBrains_Mono({
@@ -23,8 +30,8 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`dark ${hanken.variable} ${jetbrains.variable}`}>
-      <body className="text-on-surface font-sans antialiased min-h-screen selection:bg-primary-container/30 selection:text-primary">
+    <html lang="en" className={`dark ${spaceGrotesk.variable} ${jakarta.variable} ${jetbrains.variable}`}>
+      <body className="bg-surface text-on-surface font-sans antialiased min-h-screen">
         {children}
       </body>
     </html>

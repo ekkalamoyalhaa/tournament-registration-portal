@@ -2,12 +2,12 @@ import { cn } from '@/lib/cn';
 
 const STATUS_STYLES: Record<string, string> = {
   DRAFT: 'bg-white/5 text-outline border-white/10',
-  SUBMITTED: 'bg-primary-container/10 text-primary-container border-primary-container/20',
-  UNDER_REVIEW: 'bg-secondary-container/10 text-secondary border-secondary/20',
-  CHANGES_REQUESTED: 'bg-tertiary-container/10 text-tertiary border-tertiary/20',
-  RESUBMITTED: 'bg-primary-container/10 text-primary-container border-primary-container/20',
-  APPROVED: 'bg-green-500/10 text-green-400 border-green-500/20',
-  REJECTED: 'bg-error/10 text-error border-error/20',
+  SUBMITTED: 'bg-gold/15 text-primary border-gold/30',
+  UNDER_REVIEW: 'bg-secondary-container/50 text-secondary border-secondary/25',
+  CHANGES_REQUESTED: 'bg-tertiary-container/15 text-tertiary border-tertiary/30',
+  RESUBMITTED: 'bg-gold/15 text-primary border-gold/30',
+  APPROVED: 'bg-secondary/10 text-secondary border-secondary/30',
+  REJECTED: 'bg-error/10 text-error border-error/25',
 };
 
 export function StatusBadge({ status }: { status: string }) {
@@ -16,7 +16,7 @@ export function StatusBadge({ status }: { status: string }) {
   return (
     <span
       className={cn(
-        'inline-flex items-center rounded-full border px-3 py-1 font-mono text-label-sm font-medium uppercase tracking-wider',
+        'inline-flex items-center rounded-full border px-3 py-1 font-display text-label-sm uppercase',
         style
       )}
     >

@@ -29,13 +29,13 @@ export default async function TeamRegistrationPage() {
 
         {/* Page Header */}
         <div className="mb-stack-lg">
-          <p className="mb-2 font-label-md text-label-md text-primary-fixed-dim">
+          <p className="mb-2 font-display text-label-md uppercase text-gold">
             Tournament Participation
           </p>
-          <h2 className="mb-stack-sm font-display-lg text-display-lg text-on-surface">
+          <h2 className="mb-stack-sm font-display text-display-lg text-white">
             Team information
           </h2>
-          <p className="max-w-2xl font-body-lg text-body-lg text-on-surface-variant">
+          <p className="max-w-2xl font-sans text-body-lg text-body-lg text-on-surface-variant">
             Submit your team details for slot approval. You cannot add players until your slot is approved.
           </p>
         </div>
@@ -43,35 +43,35 @@ export default async function TeamRegistrationPage() {
         {/* Registration Form Card */}
         <div className="glass-card relative overflow-hidden rounded-xl p-container-padding">
           {/* Subtle top glow */}
-          <div className="absolute left-0 right-0 top-0 h-[1px] bg-gradient-to-r from-transparent via-primary-container/50 to-transparent" />
+          <div className="absolute left-0 right-0 top-0 h-[1px] bg-gradient-to-r from-transparent via-gold/40 to-transparent" />
 
           <form action={handleSubmit} className="space-y-stack-lg">
             {/* Team Name */}
             <div className="space-y-2">
-              <label className="block font-label-md text-label-md text-on-surface">
-                Club or team name <span className="text-error">*</span>
+              <label className="block font-display text-label-md text-on-surface">
+                Club or team name <span className="text-gold">*</span>
               </label>
               <input
                 name="name"
                 required
                 defaultValue={team.name ?? ''}
                 placeholder="Enter team name"
-                className="glass-input w-full rounded-lg px-4 py-3 font-body-md text-body-md text-on-surface placeholder:text-white/40"
+                className="glass-input w-full rounded-lg px-4 py-3 font-sans text-body-md text-on-surface placeholder:text-sand/40"
               />
             </div>
 
             {/* Institution & Division Row */}
             <div className="grid grid-cols-1 gap-gutter md:grid-cols-2">
               <div className="space-y-2">
-                <label className="block font-label-md text-label-md text-on-surface">
-                  Institution type <span className="text-error">*</span>
+                <label className="block font-display text-label-md text-on-surface">
+                  Institution type <span className="text-gold">*</span>
                 </label>
                 <div className="relative">
                   <select
                     name="institutionType"
                     required
                     defaultValue={team.institutionType ?? ''}
-                    className="glass-input w-full appearance-none rounded-lg px-4 py-3 pr-10 font-body-md text-body-md text-on-surface"
+                    className="glass-input w-full appearance-none rounded-lg px-4 py-3 pr-10 font-sans text-body-md text-on-surface"
                   >
                     <option value="" disabled>Select institution type</option>
                     <option value="UNIVERSITY">University</option>
@@ -79,7 +79,7 @@ export default async function TeamRegistrationPage() {
                     <option value="HIGHER_EDUCATION_INSTITUTE">Higher Education Institute</option>
                   </select>
                   <svg
-                    className="pointer-events-none absolute right-3 top-1/2 h-5 w-5 -translate-y-1/2 text-on-surface-variant"
+                    className="pointer-events-none absolute right-3 top-1/2 h-5 w-5 -translate-y-1/2 text-gold"
                     fill="none"
                     viewBox="0 0 24 24"
                     stroke="currentColor"
@@ -90,22 +90,22 @@ export default async function TeamRegistrationPage() {
               </div>
 
               <div className="space-y-2">
-                <label className="block font-label-md text-label-md text-on-surface">
-                  Division <span className="text-error">*</span>
+                <label className="block font-display text-label-md text-on-surface">
+                  Division <span className="text-gold">*</span>
                 </label>
                 <div className="relative">
                   <select
                     name="division"
                     required
                     defaultValue={registration.division ?? ''}
-                    className="glass-input w-full appearance-none rounded-lg px-4 py-3 pr-10 font-body-md text-body-md text-on-surface"
+                    className="glass-input w-full appearance-none rounded-lg px-4 py-3 pr-10 font-sans text-body-md text-on-surface"
                   >
                     <option value="" disabled>Select division</option>
                     <option value="MENS">Men&apos;s Division</option>
                     <option value="WOMENS">Women&apos;s Division</option>
                   </select>
                   <svg
-                    className="pointer-events-none absolute right-3 top-1/2 h-5 w-5 -translate-y-1/2 text-on-surface-variant"
+                    className="pointer-events-none absolute right-3 top-1/2 h-5 w-5 -translate-y-1/2 text-gold"
                     fill="none"
                     viewBox="0 0 24 24"
                     stroke="currentColor"
@@ -119,38 +119,38 @@ export default async function TeamRegistrationPage() {
             {/* Contact Row */}
             <div className="grid grid-cols-1 gap-gutter md:grid-cols-2">
               <div className="space-y-2">
-                <label className="block font-label-md text-label-md text-on-surface">
-                  Contact email <span className="text-error">*</span>
+                <label className="block font-display text-label-md text-on-surface">
+                  Contact email <span className="text-gold">*</span>
                 </label>
                 <input
                   name="contactEmail"
                   type="email"
                   required
                   defaultValue={team.contactEmail ?? ''}
-                  className="glass-input w-full rounded-lg px-4 py-3 font-body-md text-body-md text-on-surface placeholder:text-white/40"
+                  className="glass-input w-full rounded-lg px-4 py-3 font-sans text-body-md text-on-surface placeholder:text-sand/40"
                 />
               </div>
               <div className="space-y-2">
-                <label className="block font-label-md text-label-md text-on-surface">
+                <label className="block font-display text-label-md text-on-surface">
                   Contact phone
                 </label>
                 <input
                   name="contactPhone"
                   type="tel"
                   defaultValue={team.contactPhone ?? ''}
-                  className="glass-input w-full rounded-lg px-4 py-3 font-body-md text-body-md text-on-surface placeholder:text-white/40"
+                  className="glass-input w-full rounded-lg px-4 py-3 font-sans text-body-md text-on-surface placeholder:text-sand/40"
                 />
               </div>
             </div>
 
             {/* Divider */}
-            <div className="h-px w-full bg-white/5" />
+            <div className="h-px w-full bg-gold/10" />
 
             {/* Single action */}
             <div className="flex justify-end pt-4">
               <button
                 type="submit"
-                className="btn-primary rounded-lg px-8 py-3 font-label-md text-label-md font-bold transition-all duration-300 hover:-translate-y-0.5"
+                className="btn-primary rounded-lg px-8 py-3 font-display text-label-md font-bold transition-all duration-300 hover:-translate-y-0.5"
               >
                 Submit for slot approval
               </button>
@@ -159,7 +159,7 @@ export default async function TeamRegistrationPage() {
         </div>
 
         <div className="mt-6 text-center">
-          <Link href="/team/dashboard" className="font-body-md text-body-md text-primary-container hover:underline">
+          <Link href="/team/dashboard" className="font-sans text-body-md text-gold hover:text-primary">
             ← Back to dashboard
           </Link>
         </div>
