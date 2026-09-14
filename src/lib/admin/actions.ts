@@ -134,19 +134,83 @@ export async function getTeams(filters?: { status?: string; phase?: string }) {
 export async function getTeamDetail(id: string) {
   await assertAdmin();
 
-  return prisma.teamRegistration.findUnique({
+  const registration = await prisma.teamRegistration.findUnique({
     where: { id },
     include: {
       team: {
         include: {
-          players: { include: { documents: true }, orderBy: { createdAt: 'desc' } },
-          members: { include: { user: { select: { firstName: true, lastName: true, email: true } } } },
+          players: {
+            include: {
+              documents: true,
+            },
+            orderBy: {
+              createdAt: 'desc',
+            },
+          },
+          members: {
+            include: {
+              user: {
+                select: {
+                  firstName: true,
+                  lastName: true,
+                  email: true,
+                },
+              },
+            },
+          },
         },
       },
       tournament: true,
-      events: { orderBy: { createdAt: 'desc' }, take: 20 },
+      events: {
+        orderBy: {
+          createdAt: 'desc',
+        },
+        take: 20,
+      },
     },
   });
+
+  if (!registration) {
+    return null;
+  }
+
+  /*
+   * Official documents are associated with this registration
+   * through their storage keys.
+   *
+   * This avoids querying by officialRole alone, which could
+   * accidentally return another team's Manager/Coach/etc.
+   */
+  const officialStorageKeys = [
+    registration.managerIdDocKey,
+    registration.managerPhotoKey,
+    registration.coachIdDocKey,
+    registration.coachPhotoKey,
+    registration.medicIdDocKey,
+    registration.medicPhotoKey,
+    registration.officialIdDocKey,
+    registration.officialPhotoKey,
+  ].filter((key): key is string => Boolean(key));
+
+  const officialDocuments =
+    officialStorageKeys.length > 0
+      ? await prisma.playerDocument.findMany({
+          where: {
+            storageKey: {
+              in: officialStorageKeys,
+            },
+            playerId: null,
+          },
+          orderBy: {
+            createdAt: 'asc',
+          },
+        })
+      : [];
+
+  return {
+    ...registration,
+    officialDocuments,
+  };
 }
 
 /* ---------- slot approval (phase 1) ---------- */
@@ -241,6 +305,7 @@ const VALID_TRANSITIONS: Record<RegistrationStatus, RegistrationStatus[]> = {
   [RegistrationStatus.REJECTED]: [],
 };
 
+
 export async function reviewTeamRegistration(
   registrationId: string,
   action: 'approve' | 'reject' | 'request_changes',
@@ -248,41 +313,124 @@ export async function reviewTeamRegistration(
 ) {
   await assertAdmin();
 
-  const reg = await prisma.teamRegistration.findUnique({ where: { id: registrationId } });
-  if (!reg) throw new Error('Registration not found');
-  if (reg.phase !== 'PHASE_2') throw new Error('Can only review Phase 2 registrations here');
+  const reg = await prisma.teamRegistration.findUnique({
+    where: {
+      id: registrationId,
+    },
+  });
 
-  const statusMap: Record<string, RegistrationStatus> = {
+  if (!reg) {
+    throw new Error('Registration not found');
+  }
+
+  if (reg.phase !== 'PHASE_2') {
+    throw new Error(
+      'Can only review Phase 2 registrations here'
+    );
+  }
+
+  const statusMap: Record<
+    'approve' | 'reject' | 'request_changes',
+    RegistrationStatus
+  > = {
     approve: RegistrationStatus.APPROVED,
     reject: RegistrationStatus.REJECTED,
-    request_changes: RegistrationStatus.CHANGES_REQUESTED,
+    request_changes:
+      RegistrationStatus.CHANGES_REQUESTED,
   };
 
   const nextStatus = statusMap[action];
-  const allowed = VALID_TRANSITIONS[reg.status];
 
-  if (!allowed || !allowed.includes(nextStatus)) {
-    throw new Error(`Invalid transition: ${reg.status} → ${nextStatus}`);
+  /*
+   * A team that has already been asked for changes
+   * must edit and resubmit before the admin can review
+   * it again.
+   */
+  if (
+    reg.status === RegistrationStatus.CHANGES_REQUESTED
+  ) {
+    throw new Error(
+      'This registration is already awaiting changes from the team.'
+    );
   }
 
-  const updated = await prisma.teamRegistration.update({
-    where: { id: registrationId },
-    data: { status: nextStatus },
-  });
+  /*
+   * Only these statuses can be reviewed by the admin.
+   *
+   * SUBMITTED     → review
+   * UNDER_REVIEW  → review
+   * RESUBMITTED   → review
+   */
+  const reviewableStatuses: RegistrationStatus[] = [
+    RegistrationStatus.SUBMITTED,
+    RegistrationStatus.UNDER_REVIEW,
+    RegistrationStatus.RESUBMITTED,
+  ];
+
+  /*
+   * DRAFT should normally not reach the final review screen.
+   */
+  if (!reviewableStatuses.includes(reg.status)) {
+    throw new Error(
+      `Registration cannot be reviewed from status ${reg.status}.`
+    );
+  }
+
+  const reviewNote =
+    note?.trim() ||
+    (action === 'request_changes'
+      ? 'Changes requested by tournament administrator'
+      : action === 'approve'
+        ? 'Registration approved by tournament administrator'
+        : 'Registration rejected by tournament administrator');
+
+  const updated =
+    await prisma.teamRegistration.update({
+      where: {
+        id: registrationId,
+      },
+      data: {
+        status: nextStatus,
+        reviewedAt: new Date(),
+
+        /*
+         * Keep the latest admin instruction on the
+         * registration itself so the team can see it.
+         */
+        internalNotes:
+          action === 'request_changes'
+            ? reviewNote
+            : reg.internalNotes,
+      },
+    });
 
   await prisma.registrationEvent.create({
     data: {
       teamRegistrationId: registrationId,
       fromStatus: reg.status,
       toStatus: nextStatus,
-      note: note || `${action} by admin`,
+      note: reviewNote,
     },
   });
 
+  /*
+   * Refresh both admin and team-facing pages.
+   */
+  revalidatePath('/admin');
   revalidatePath('/admin/teams');
   revalidatePath(`/admin/teams/${registrationId}`);
-  return { success: true, registration: updated };
+
+  revalidatePath('/team/dashboard');
+  revalidatePath('/team/register/officials');
+  revalidatePath('/team/register/players');
+  revalidatePath('/team/register/review');
+
+  return {
+    success: true,
+    registration: updated,
+  };
 }
+
 
 export async function reviewPlayer(
   playerId: string,
@@ -309,4 +457,43 @@ export async function reviewPlayer(
 
   revalidatePath('/admin/teams');
   return { success: true };
+}
+
+
+export async function deleteTeamRegistration(
+  registrationId: string
+) {
+  await assertAdmin();
+
+  const registration =
+    await prisma.teamRegistration.findUnique({
+      where: {
+        id: registrationId,
+      },
+      select: {
+        id: true,
+        teamId: true,
+      },
+    });
+
+  if (!registration) {
+    throw new Error('Registration not found');
+  }
+
+  await prisma.teamRegistration.delete({
+    where: {
+      id: registrationId,
+    },
+  });
+
+  revalidatePath('/admin');
+  revalidatePath('/admin/teams');
+  revalidatePath(
+    `/admin/teams/${registrationId}`
+  );
+
+  return {
+    success: true,
+    registrationId,
+  };
 }

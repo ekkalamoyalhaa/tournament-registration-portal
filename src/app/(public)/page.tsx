@@ -1,8 +1,7 @@
 import Link from 'next/link';
-import { prisma } from '@/lib/db/prisma';
 import {
+  Users,
   CalendarDays,
-  MapPin,
   ArrowRight,
   ClipboardList,
   ListOrdered,
@@ -12,56 +11,36 @@ import {
 export default async function HomePage() {
   const tournament = {
     name: 'IUMSU Beach Handball Fiesta 2026',
-    startDate: '12 December',
-    endDate: '20 December 2026',
-    venue: 'National Stadium',
-    registrationDeadline: '30 November 2026',
+    divisions: "Men's & Women's Division",
+    registrationDeadline: '25 September 2026',
   };
 
-  const teamCount = await prisma.teamRegistration.count({
-    where: { status: 'APPROVED' },
-  });
-
-  const totalSlots = 42;
-
   return (
-    <main className="relative min-h-screen w-full overflow-hidden bg-[#061911]">
+    <main className="relative min-h-screen w-full overflow-hidden bg-[#04120c]">
       {/* Atmospheric background */}
       <div className="pointer-events-none fixed inset-0 z-0" aria-hidden="true">
         <div
           className="absolute inset-0"
           style={{
             backgroundImage: `
-              radial-gradient(
-                circle at 85% 15%,
-                rgba(229, 184, 75, 0.14) 0%,
-                transparent 45%
-              ),
-              radial-gradient(
-                circle at 15% 50%,
-                rgba(20, 61, 43, 0.6) 0%,
-                transparent 60%
-              ),
-              linear-gradient(
-                160deg,
-                #0a2419 0%,
-                #061911 50%,
-                #030d09 100%
-              )
+              radial-gradient(circle at 85% 15%, rgba(229, 184, 75, 0.12) 0%, rgba(229, 184, 75, 0.03) 30%, transparent 60%),
+              radial-gradient(circle at 18% 35%, rgba(27, 77, 62, 0.45) 0%, rgba(18, 56, 41, 0.25) 35%, transparent 70%),
+              radial-gradient(circle at 60% 85%, rgba(13, 48, 34, 0.4) 0%, rgba(4, 18, 12, 0.6) 55%, transparent 80%),
+              linear-gradient(rgb(7, 31, 22) 0%, rgb(3, 20, 14) 45%, rgb(1, 10, 6) 100%)
             `,
+            backgroundAttachment: 'fixed',
+            backgroundRepeat: 'no-repeat',
+            backgroundSize: 'cover',
           }}
         />
 
-        {/* Subtle ambient glow */}
-        <div className="absolute -top-40 right-[-8%] h-[520px] w-[520px] rounded-full bg-gold/10 blur-[140px]" />
-        <div className="absolute -bottom-48 -left-32 h-[620px] w-[620px] rounded-full bg-forest-raised/30 blur-[150px]" />
-
         {/* Micro-grain / dithering */}
         <div
-          className="absolute inset-0 opacity-[0.035] mix-blend-overlay"
+          className="absolute inset-0 opacity-40 mix-blend-overlay"
           style={{
             backgroundImage:
-              "url(\"data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E\")",
+              "url(\"data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.08'/%3E%3C/svg%3E\")",
+            backgroundRepeat: 'repeat',
           }}
         />
       </div>
@@ -74,11 +53,11 @@ export default async function HomePage() {
             <div className="lg:col-span-8 flex flex-col gap-stack-lg">
               <div className="flex flex-col gap-stack-sm">
                 <p className="font-display text-label-md uppercase text-gold flex items-center gap-2">
-                  <CalendarDays size={18} />
-                  {tournament.startDate} — {tournament.endDate}
+                  <Users size={18} />
+                  {tournament.divisions}
                   <span className="mx-2 opacity-30">|</span>
-                  <MapPin size={18} />
-                  {tournament.venue}
+                  <CalendarDays size={18} />
+                  Register before {tournament.registrationDeadline}
                 </p>
 
                 <h1 className="font-display text-display-hero-mobile md:text-display-hero text-white mt-2">
@@ -87,9 +66,9 @@ export default async function HomePage() {
               </div>
 
               <p className="font-sans text-body-lg text-on-surface-variant max-w-2xl leading-relaxed">
-                Register your team, submit your player list, and track every
-                step of review in one place. Registration closes{' '}
-                {tournament.registrationDeadline}.
+                Open for Universities, Colleges, Higher Education Institutions,
+                and Higher Secondary Schools. Submit your team and player
+                roster online before the registration deadline.
               </p>
 
               <div className="flex flex-wrap gap-stack-md mt-4">
@@ -111,45 +90,16 @@ export default async function HomePage() {
               </div>
             </div>
 
-            {/* Right Column: Stats Card */}
+            {/* Right Column: Event Poster Card */}
             <div className="lg:col-span-4 mt-8 lg:mt-0">
-              <div className="glass-panel rounded-xl p-container-padding flex flex-col gap-stack-lg">
-                <div className="grid grid-cols-2 gap-stack-lg">
-                  <div>
-                    <p className="font-display text-label-md uppercase text-on-surface-variant mb-1">
-                      Teams confirmed
-                    </p>
-                    <p className="font-display text-headline-lg text-gold">
-                      {teamCount}
-                    </p>
-                  </div>
-
-                  <div>
-                    <p className="font-display text-label-md uppercase text-on-surface-variant mb-1">
-                      Slots available
-                    </p>
-                    <p className="font-display text-headline-lg text-gold">
-                      {totalSlots - teamCount}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="h-px w-full bg-gold/20" />
-
-                <div>
-                  <p className="font-display text-label-md uppercase text-on-surface-variant mb-1">
-                    Registration closes
-                  </p>
-                  <p className="font-sans text-body-md text-white">
-                    {tournament.registrationDeadline}
-                  </p>
-                </div>
-
-                <div className="w-full h-32 rounded-lg border border-gold/20 opacity-70 grayscale mt-2 overflow-hidden relative bg-forest-raised">
-                  <div className="absolute inset-0 bg-gold/10 mix-blend-overlay" />
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <MapPin size={32} className="text-outline/40" />
-                  </div>
+              <div className="glass-panel rounded-xl p-3 border border-gold/30 shadow-glow-gold overflow-hidden flex flex-col items-center justify-center group">
+                <div className="w-full rounded-lg overflow-hidden border border-gold/20 shadow-lg">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src="/notice.jpg"
+                    alt={`${tournament.name} Poster`}
+                    className="w-full h-auto object-contain transform group-hover:scale-[1.02] transition-all duration-300"
+                  />
                 </div>
               </div>
             </div>
@@ -164,14 +114,14 @@ export default async function HomePage() {
                 body: 'A guided, multi-step process — save a draft and come back anytime before the deadline.',
               },
               {
-                icon: <ListOrdered size={16} />,
-                title: 'Fixtures',
-                body: 'Match schedules are published here as soon as they’re confirmed by the organizers.',
+                icon: <ShieldCheck size={16} />,
+                title: 'Team Details',
+                body: 'Once a registration clears review, the team can submit the details and documents for the team.',
               },
               {
-                icon: <ShieldCheck size={16} />,
-                title: 'Approved teams',
-                body: 'Once a registration clears review, the team appears on the public roster.',
+                icon: <ListOrdered size={16} />,
+                title: 'Fixtures',
+                body: ' Match schedules are published here as soon as they are confirmed by the organizers',
               },
             ].map((feature) => (
               <div

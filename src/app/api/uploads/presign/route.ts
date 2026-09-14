@@ -152,31 +152,37 @@ export async function POST(request: Request) {
     );
   }
 
-  if (uploadKind === 'document') {
-    if (playerId) {
-      const player = await prisma.player.findFirst({
-        where: {
-          id: playerId,
-          teamId,
-        },
-      });
+  if (uploadKind === 'document' || uploadKind === 'player-photo') {
+  if (playerId) {
+    const player = await prisma.player.findFirst({
+      where: {
+        id: playerId,
+        teamId,
+      },
+    });
 
-      if (!player) {
-        return NextResponse.json(
-          { error: 'Player not found on this team' },
-          { status: 404 }
-        );
-      }
-    } else if (!officialRole) {
+    if (!player) {
       return NextResponse.json(
-        {
-          error:
-            'playerId or officialRole required for documents',
-        },
-        { status: 400 }
+        { error: 'Player not found on this team' },
+        { status: 404 }
       );
     }
+  } else if (uploadKind === 'document' && !officialRole) {
+    return NextResponse.json(
+      {
+        error: 'playerId or officialRole required for documents',
+      },
+      { status: 400 }
+    );
+  } else if (uploadKind === 'player-photo') {
+    return NextResponse.json(
+      {
+        error: 'playerId required for player photos',
+      },
+      { status: 400 }
+    );
   }
+}
 
   const extension = extensionFromMime(mimeType);
 

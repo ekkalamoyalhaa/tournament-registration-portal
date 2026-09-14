@@ -1,13 +1,19 @@
 'use client';
 
 import { useState, useRef } from 'react';
-import { Contact, User, CheckCircle, AlertCircle } from 'lucide-react';
+import {
+  Contact,
+  User,
+  CheckCircle,
+  AlertCircle,
+} from 'lucide-react';
 import { saveDocumentRecord } from '@/lib/registration/actions';
 
 type UploadState = 'idle' | 'uploading' | 'done' | 'error';
 
 interface DocumentUploadCardProps {
   teamId: string;
+  registrationId: string;
   officialRole: string;
   documentType: string;
   label: string;
@@ -16,6 +22,7 @@ interface DocumentUploadCardProps {
 
 export function DocumentUploadCard({
   teamId,
+  registrationId,
   officialRole,
   documentType,
   label,
@@ -24,6 +31,7 @@ export function DocumentUploadCard({
   const [state, setState] = useState<UploadState>('idle');
   const [fileName, setFileName] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState('');
+
   const inputRef = useRef<HTMLInputElement>(null);
 
   async function handleFile(file: File) {
@@ -32,9 +40,12 @@ export function DocumentUploadCard({
     setErrorMsg('');
 
     try {
+      // 1. Request a presigned upload URL
       const presignRes = await fetch('/api/uploads/presign', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+        },
         body: JSON.stringify({
           kind: 'document',
           teamId,
@@ -45,33 +56,59 @@ export function DocumentUploadCard({
       });
 
       const presignData = await presignRes.json();
+
       if (!presignRes.ok) {
-        throw new Error(presignData.error || `Presign failed (${presignRes.status})`);
+        throw new Error(
+          presignData.error ||
+            `Presign failed (${presignRes.status})`
+        );
       }
 
       const { uploadUrl, key } = presignData;
 
-      const putRes = await fetch(uploadUrl, {
-        method: 'PUT',
-        headers: { 'Content-Type': file.type },
-        body: file,
-      });
-      if (!putRes.ok) {
-        throw new Error(`Upload to R2 failed (${putRes.status})`);
+      if (!uploadUrl || !key) {
+        throw new Error(
+          'Invalid upload response from server.'
+        );
       }
 
-      await saveDocumentRecord({
-        officialRole,
-        documentType,
-        storageKey: key,
-        originalFilename: file.name,
-        mimeType: file.type,
-        size: file.size,
+      // 2. Upload directly to R2
+      const putRes = await fetch(uploadUrl, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': file.type,
+        },
+        body: file,
       });
 
+      if (!putRes.ok) {
+        throw new Error(
+          `Upload to R2 failed (${putRes.status})`
+        );
+      }
+
+      // 3. Save document metadata against the
+      //    exact registration being edited
+      await saveDocumentRecord(
+        {
+          officialRole,
+          documentType,
+          storageKey: key,
+          originalFilename: file.name,
+          mimeType: file.type,
+          size: file.size,
+        },
+        registrationId
+      );
+
       setState('done');
-    } catch (e: any) {
-      setErrorMsg(e.message || 'Upload failed');
+    } catch (e: unknown) {
+      const message =
+        e instanceof Error
+          ? e.message
+          : 'Upload failed';
+
+      setErrorMsg(message);
       setState('error');
     }
   }
@@ -94,12 +131,22 @@ export function DocumentUploadCard({
         className="hidden"
         onChange={(e) => {
           const file = e.target.files?.[0];
-          if (file) handleFile(file);
+
+          if (file) {
+            handleFile(file);
+          }
+
+          // Allow the same file to be selected again
+          // after an error or replacement.
+          e.target.value = '';
         }}
       />
 
       {state === 'done' ? (
-        <CheckCircle size={40} className="mb-2 text-green-400" />
+        <CheckCircle
+          size={40}
+          className="mb-2 text-green-400"
+        />
       ) : (
         <Icon
           size={40}
@@ -107,20 +154,35 @@ export function DocumentUploadCard({
         />
       )}
 
-      <p className="mb-1 font-label-sm text-label-sm text-on-surface">{label}</p>
+      <p className="mb-1 font-label-sm text-label-sm text-on-surface">
+        {label}
+      </p>
 
       {state === 'idle' && (
-        <p className="text-[10px] text-on-surface-variant">Click or drag and drop</p>
+        <p className="text-[10px] text-on-surface-variant">
+          Click or drag and drop
+        </p>
       )}
+
       {state === 'uploading' && (
-        <p className="text-[10px] text-primary-container">Uploading…</p>
+        <p className="text-[10px] text-primary-container">
+          Uploading…
+        </p>
       )}
+
       {state === 'done' && fileName && (
-        <p className="text-[10px] text-green-400">{fileName}</p>
+        <p className="text-[10px] text-green-400">
+          {fileName}
+        </p>
       )}
+
       {state === 'error' && (
-        <p className="flex items-center gap-1 text-[10px] text-error" title={errorMsg}>
-          <AlertCircle size={10} /> Failed
+        <p
+          className="flex items-center gap-1 text-[10px] text-error"
+          title={errorMsg}
+        >
+          <AlertCircle size={10} />
+          Failed
         </p>
       )}
     </div>

@@ -1,10 +1,25 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { SignOutButton } from '@/components/auth/SignOutButton';
-import { getOrCreateDraftRegistration, saveAndSubmitPhase1 } from '@/lib/registration/actions';
+import {
+  getOrCreateDraftRegistration,
+  saveAndSubmitPhase1,
+} from '@/lib/registration/actions';
 
-export default async function TeamRegistrationPage() {
-  const { team, registration } = await getOrCreateDraftRegistration();
+type TeamRegistrationPageProps = {
+  searchParams: Promise<{
+    registrationId?: string;
+  }>;
+};
+
+export default async function TeamRegistrationPage({
+  searchParams,
+}: TeamRegistrationPageProps) {
+  const params = await searchParams;
+  const registrationId = params.registrationId;
+
+  const { team, registration } =
+    await getOrCreateDraftRegistration(registrationId);
 
   if (registration.phase !== 'PHASE_1') {
     redirect('/team/dashboard');
@@ -12,10 +27,20 @@ export default async function TeamRegistrationPage() {
 
   async function handleSubmit(formData: FormData) {
     'use server';
-    const result = await saveAndSubmitPhase1(formData);
+
+    const result = await saveAndSubmitPhase1(
+      formData,
+      registration.id
+    );
+
     if (result.error) {
-      redirect('/team/register?error=' + encodeURIComponent(result.error));
+      redirect(
+        `/team/register?registrationId=${encodeURIComponent(
+          registration.id
+        )}&error=${encodeURIComponent(result.error)}`
+      );
     }
+
     redirect('/team/dashboard');
   }
 
@@ -32,11 +57,14 @@ export default async function TeamRegistrationPage() {
           <p className="mb-2 font-display text-label-md uppercase text-gold">
             Tournament Participation
           </p>
+
           <h2 className="mb-stack-sm font-display text-display-lg text-white">
             Team information
           </h2>
-          <p className="max-w-2xl font-sans text-body-lg text-body-lg text-on-surface-variant">
-            Submit your team details for slot approval. You cannot add players until your slot is approved.
+
+          <p className="max-w-2xl font-sans text-body-lg text-on-surface-variant">
+            Submit your team details for slot approval. You cannot add
+            players until your slot is approved.
           </p>
         </div>
 
@@ -51,10 +79,13 @@ export default async function TeamRegistrationPage() {
               <label className="block font-display text-label-md text-on-surface">
                 Club or team name <span className="text-gold">*</span>
               </label>
+
               <input
                 name="name"
                 required
-                defaultValue={team.name ?? ''}
+                defaultValue={
+                  team.name === 'Draft Team' ? '' : team.name ?? ''
+                }
                 placeholder="Enter team name"
                 className="glass-input w-full rounded-lg px-4 py-3 font-sans text-body-md text-on-surface placeholder:text-sand/40"
               />
@@ -66,6 +97,7 @@ export default async function TeamRegistrationPage() {
                 <label className="block font-display text-label-md text-on-surface">
                   Institution type <span className="text-gold">*</span>
                 </label>
+
                 <div className="relative">
                   <select
                     name="institutionType"
@@ -73,18 +105,35 @@ export default async function TeamRegistrationPage() {
                     defaultValue={team.institutionType ?? ''}
                     className="glass-input w-full appearance-none rounded-lg px-4 py-3 pr-10 font-sans text-body-md text-on-surface"
                   >
-                    <option value="" disabled>Select institution type</option>
-                    <option value="UNIVERSITY">University</option>
-                    <option value="COLLEGE">College</option>
-                    <option value="HIGHER_EDUCATION_INSTITUTE">Higher Education Institute</option>
+                    <option value="" disabled>
+                      Select institution type
+                    </option>
+
+                    <option value="UNIVERSITY">
+                      University
+                    </option>
+
+                    <option value="COLLEGE">
+                      College
+                    </option>
+
+                    <option value="HIGHER_EDUCATION_INSTITUTE">
+                      Higher Education Institute
+                    </option>
                   </select>
+
                   <svg
                     className="pointer-events-none absolute right-3 top-1/2 h-5 w-5 -translate-y-1/2 text-gold"
                     fill="none"
                     viewBox="0 0 24 24"
                     stroke="currentColor"
                   >
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M19 9l-7 7-7-7"
+                    />
                   </svg>
                 </div>
               </div>
@@ -93,6 +142,7 @@ export default async function TeamRegistrationPage() {
                 <label className="block font-display text-label-md text-on-surface">
                   Division <span className="text-gold">*</span>
                 </label>
+
                 <div className="relative">
                   <select
                     name="division"
@@ -100,17 +150,31 @@ export default async function TeamRegistrationPage() {
                     defaultValue={registration.division ?? ''}
                     className="glass-input w-full appearance-none rounded-lg px-4 py-3 pr-10 font-sans text-body-md text-on-surface"
                   >
-                    <option value="" disabled>Select division</option>
-                    <option value="MENS">Men&apos;s Division</option>
-                    <option value="WOMENS">Women&apos;s Division</option>
+                    <option value="" disabled>
+                      Select division
+                    </option>
+
+                    <option value="MENS">
+                      Men&apos;s Division
+                    </option>
+
+                    <option value="WOMENS">
+                      Women&apos;s Division
+                    </option>
                   </select>
+
                   <svg
                     className="pointer-events-none absolute right-3 top-1/2 h-5 w-5 -translate-y-1/2 text-gold"
                     fill="none"
                     viewBox="0 0 24 24"
                     stroke="currentColor"
                   >
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M19 9l-7 7-7-7"
+                    />
                   </svg>
                 </div>
               </div>
@@ -122,6 +186,7 @@ export default async function TeamRegistrationPage() {
                 <label className="block font-display text-label-md text-on-surface">
                   Contact email <span className="text-gold">*</span>
                 </label>
+
                 <input
                   name="contactEmail"
                   type="email"
@@ -130,10 +195,12 @@ export default async function TeamRegistrationPage() {
                   className="glass-input w-full rounded-lg px-4 py-3 font-sans text-body-md text-on-surface placeholder:text-sand/40"
                 />
               </div>
+
               <div className="space-y-2">
                 <label className="block font-display text-label-md text-on-surface">
                   Contact phone
                 </label>
+
                 <input
                   name="contactPhone"
                   type="tel"
@@ -158,8 +225,12 @@ export default async function TeamRegistrationPage() {
           </form>
         </div>
 
+        {/* Back to dashboard */}
         <div className="mt-6 text-center">
-          <Link href="/team/dashboard" className="font-sans text-body-md text-gold hover:text-primary">
+          <Link
+            href="/team/dashboard"
+            className="font-sans text-body-md text-gold hover:text-primary"
+          >
             ← Back to dashboard
           </Link>
         </div>

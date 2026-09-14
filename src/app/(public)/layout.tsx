@@ -12,9 +12,6 @@ export default async function PublicLayout({
     <div className="min-h-screen bg-surface text-on-surface font-sans bg-pattern">
       <header className="flex items-center justify-between px-margin-mobile md:px-margin-desktop py-stack-lg bg-transparent w-full z-50 absolute top-0">
         <div className="flex items-center gap-gutter">
-          <Link href="/" className="font-display text-headline-md font-bold text-white tracking-tight">
-            Tournament
-          </Link>
           <nav className="hidden md:flex gap-gutter">
             <Link
               href="/admin/teams"

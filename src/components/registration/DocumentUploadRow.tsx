@@ -16,7 +16,17 @@ export interface DocumentRequirement {
   documentType: string;
 }
 
-export function DocumentUploadRow({ requirement, teamId }: { requirement: DocumentRequirement; teamId: string }) {
+interface DocumentUploadRowProps {
+  requirement: DocumentRequirement;
+  teamId: string;
+  registrationId: string;
+}
+
+export function DocumentUploadRow({
+  requirement,
+  teamId,
+  registrationId,
+}: DocumentUploadRowProps) {
   const [state, setState] = useState<UploadState>('idle');
   const [fileName, setFileName] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState('');
@@ -41,35 +51,57 @@ export function DocumentUploadRow({ requirement, teamId }: { requirement: Docume
       });
 
       const presignData = await presignRes.json();
+
       if (!presignRes.ok) {
-        throw new Error(presignData.error || `Presign failed (${presignRes.status})`);
+        throw new Error(
+          presignData.error ||
+            `Presign failed (${presignRes.status})`
+        );
       }
 
       const { uploadUrl, key } = presignData;
 
-      const putRes = await fetch(uploadUrl, {
-        method: 'PUT',
-        headers: { 'Content-Type': file.type },
-        body: file,
-      });
-      if (!putRes.ok) {
-        const putBody = await putRes.text().catch(() => '');
-        throw new Error(`Upload to R2 failed (${putRes.status})`);
+      if (!uploadUrl || !key) {
+        throw new Error(
+          'Invalid upload response from server.'
+        );
       }
 
-      await saveDocumentRecord({
-        playerId: requirement.playerId,
-        officialRole: requirement.officialRole,
-        documentType: requirement.documentType,
-        storageKey: key,
-        originalFilename: file.name,
-        mimeType: file.type,
-        size: file.size,
+      const putRes = await fetch(uploadUrl, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': file.type,
+        },
+        body: file,
       });
 
+      if (!putRes.ok) {
+        throw new Error(
+          `Upload to R2 failed (${putRes.status})`
+        );
+      }
+
+      await saveDocumentRecord(
+        {
+          playerId: requirement.playerId,
+          officialRole: requirement.officialRole,
+          documentType: requirement.documentType,
+          storageKey: key,
+          originalFilename: file.name,
+          mimeType: file.type,
+          size: file.size,
+        },
+        registrationId
+      );
+
       setState('done');
-    } catch (e: any) {
-      setErrorMsg(e.message || 'Upload failed');
+    } catch (e: unknown) {
+      const message =
+        e instanceof Error
+          ? e.message
+          : 'Upload failed';
+
+      setErrorMsg(message);
       setState('error');
     }
   }
@@ -77,23 +109,39 @@ export function DocumentUploadRow({ requirement, teamId }: { requirement: Docume
   return (
     <div className="flex items-center justify-between rounded-lg border border-white/5 bg-white/[0.02] px-4 py-3">
       <div>
-        <p className="font-sans text-body-md font-medium text-on-surface">{requirement.label}</p>
-        <p className="font-mono text-label-sm text-outline">{requirement.playerName}</p>
+        <p className="font-sans text-body-md font-medium text-on-surface">
+          {requirement.label}
+        </p>
+
+        <p className="font-mono text-label-sm text-outline">
+          {requirement.playerName}
+        </p>
       </div>
+
       <div className="flex items-center gap-3">
         {state === 'done' && (
           <span className="flex items-center gap-1 font-mono text-label-sm text-green-400">
-            <CheckCircle size={14} /> {fileName}
+            <CheckCircle size={14} />
+            {fileName}
           </span>
         )}
+
         {state === 'uploading' && (
-          <span className="flex items-center gap-1 font-mono text-label-sm text-primary-container">Uploading…</span>
-        )}
-        {state === 'error' && (
-          <span className="flex items-center gap-1 font-mono text-label-sm text-error" title={errorMsg}>
-            <AlertCircle size={14} /> Failed
+          <span className="flex items-center gap-1 font-mono text-label-sm text-primary-container">
+            Uploading…
           </span>
         )}
+
+        {state === 'error' && (
+          <span
+            className="flex items-center gap-1 font-mono text-label-sm text-error"
+            title={errorMsg}
+          >
+            <AlertCircle size={14} />
+            Failed
+          </span>
+        )}
+
         <div className="relative">
           <input
             type="file"
@@ -101,13 +149,19 @@ export function DocumentUploadRow({ requirement, teamId }: { requirement: Docume
             className="absolute inset-0 cursor-pointer opacity-0"
             onChange={(e) => {
               const file = e.target.files?.[0];
-              if (file) handleFile(file);
+
+              if (file) {
+                handleFile(file);
+              }
+
+              e.target.value = '';
             }}
           />
+
           <GlassButton
             type="button"
             variant="ghost"
-            className="pointer-events-none px-3 py-1.5 text-label-md flex items-center gap-1"
+            className="pointer-events-none flex items-center gap-1 px-3 py-1.5 text-label-md"
           >
             <Upload size={14} />
             {state === 'done' ? 'Replace' : 'Upload'}

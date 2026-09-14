@@ -1,406 +1,1585 @@
+
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+
 import { GlassCard } from '@/components/ui/GlassCard';
 import { GlassButton } from '@/components/ui/GlassButton';
 import { StatusBadge } from '@/components/ui/StatusBadge';
+
 import {
   getTeamDetail,
   approveSlot,
   rejectSlot,
   reviewTeamRegistration,
   reviewPlayer,
+  deleteTeamRegistration,
 } from '@/lib/admin/actions';
-import { ArrowLeft, CheckCircle, AlertTriangle, XCircle, Eye } from 'lucide-react';
 
-type Tab = 'overview' | 'players' | 'documents' | 'activity';
+type TeamDetail = Awaited<
+  ReturnType<typeof getTeamDetail>
+>;
 
-export default function AdminTeamReviewPage({ params }: { params: { id: string } }) {
+export default function AdminTeamReviewPage({
+  params,
+}: {
+  params: { id: string };
+}) {
   const router = useRouter();
-  const [data, setData] = useState<any>(null);
-  const [tab, setTab] = useState<Tab>('overview');
+
+  const [data, setData] = useState<TeamDetail | null>(
+    null
+  );
+
   const [loading, setLoading] = useState(true);
-  const [actionLoading, setActionLoading] = useState(false);
+
+  const [actionLoading, setActionLoading] =
+    useState(false);
+
+  const [deleteLoading, setDeleteLoading] =
+    useState(false);
+
+  const [showDeleteDialog, setShowDeleteDialog] =
+    useState(false);
+
   const [note, setNote] = useState('');
-  const [rejectReason, setRejectReason] = useState('');
+
+  const [actionError, setActionError] =
+    useState('');
+
+  const [actionSuccess, setActionSuccess] =
+    useState('');
+
+  /*
+   * ---------------------------------------------------------
+   * LOAD REGISTRATION
+   * ---------------------------------------------------------
+   */
 
   useEffect(() => {
-    getTeamDetail(params.id).then((d) => {
-      setData(d);
-      setLoading(false);
-    });
+    let mounted = true;
+
+    async function loadTeam() {
+      try {
+        setLoading(true);
+        setActionError('');
+
+        const result = await getTeamDetail(
+          params.id
+        );
+
+        if (mounted) {
+          setData(result);
+        }
+      } catch (error) {
+        console.error(
+          'Failed to load team:',
+          error
+        );
+
+        if (mounted) {
+          setActionError(
+            error instanceof Error
+              ? error.message
+              : 'Failed to load registration.'
+          );
+        }
+      } finally {
+        if (mounted) {
+          setLoading(false);
+        }
+      }
+    }
+
+    loadTeam();
+
+    return () => {
+      mounted = false;
+    };
   }, [params.id]);
+
+  /*
+   * ---------------------------------------------------------
+   * REFRESH DATA
+   * ---------------------------------------------------------
+   */
+
+  async function refreshTeam() {
+    const refreshed = await getTeamDetail(
+      params.id
+    );
+
+    setData(refreshed);
+
+    router.refresh();
+  }
+
+  /*
+   * ---------------------------------------------------------
+   * SLOT APPROVAL
+   * PHASE 1
+   * ---------------------------------------------------------
+   */
 
   async function handleSlotApprove() {
     setActionLoading(true);
+    setActionError('');
+    setActionSuccess('');
+
     try {
-      await approveSlot(params.id, note || undefined);
-      router.refresh();
-      const refreshed = await getTeamDetail(params.id);
-      setData(refreshed);
+      const result = await approveSlot(
+        params.id,
+        note.trim() || undefined
+      );
+
+      if (!result?.success) {
+        throw new Error(
+          'The slot approval action failed.'
+        );
+      }
+
+      setActionSuccess(
+        'Slot approved successfully. The team can now continue with Phase 2.'
+      );
+
       setNote('');
+
+      await refreshTeam();
+    } catch (error) {
+      console.error(
+        'Slot approval failed:',
+        error
+      );
+
+      setActionError(
+        error instanceof Error
+          ? error.message
+          : 'Unable to approve the slot.'
+      );
     } finally {
       setActionLoading(false);
     }
   }
+
+  /*
+   * ---------------------------------------------------------
+   * SLOT REJECTION
+   * PHASE 1
+   * ---------------------------------------------------------
+   */
 
   async function handleSlotReject() {
-    if (!rejectReason) return;
     setActionLoading(true);
-    try {
-      await rejectSlot(params.id, rejectReason);
-      router.refresh();
-      const refreshed = await getTeamDetail(params.id);
-      setData(refreshed);
-      setRejectReason('');
-    } finally {
-      setActionLoading(false);
-    }
-  }
+    setActionError('');
+    setActionSuccess('');
 
-  async function handleTeamAction(action: 'approve' | 'reject' | 'request_changes') {
-    setActionLoading(true);
     try {
-      await reviewTeamRegistration(params.id, action, note || undefined);
-      router.refresh();
-      const refreshed = await getTeamDetail(params.id);
-      setData(refreshed);
+      const reason =
+        note.trim() ||
+        'Slot rejected by tournament administrator';
+
+      const result = await rejectSlot(
+        params.id,
+        reason
+      );
+
+      if (!result?.success) {
+        throw new Error(
+          'The slot rejection action failed.'
+        );
+      }
+
+      setActionSuccess(
+        'Slot rejected successfully.'
+      );
+
       setNote('');
+
+      await refreshTeam();
+    } catch (error) {
+      console.error(
+        'Slot rejection failed:',
+        error
+      );
+
+      setActionError(
+        error instanceof Error
+          ? error.message
+          : 'Unable to reject the slot.'
+      );
     } finally {
       setActionLoading(false);
     }
   }
 
-  async function handlePlayerAction(playerId: string, action: 'approve' | 'reject' | 'request_changes') {
-    await reviewPlayer(playerId, action);
-    router.refresh();
-    const refreshed = await getTeamDetail(params.id);
-    setData(refreshed);
+  /*
+   * ---------------------------------------------------------
+   * FINAL TEAM REVIEW
+   * PHASE 2
+   * ---------------------------------------------------------
+   */
+
+  async function handleTeamAction(
+    action:
+      | 'approve'
+      | 'reject'
+      | 'request_changes'
+  ) {
+    setActionLoading(true);
+    setActionError('');
+    setActionSuccess('');
+
+    try {
+      const result =
+        await reviewTeamRegistration(
+          params.id,
+          action,
+          note.trim() || undefined
+        );
+
+      if (!result?.success) {
+        throw new Error(
+          'The registration review action failed.'
+        );
+      }
+
+      const successMessage =
+        action === 'approve'
+          ? 'Registration approved successfully.'
+          : action === 'reject'
+            ? 'Registration rejected successfully.'
+            : 'Changes requested successfully.';
+
+      setActionSuccess(successMessage);
+
+      setNote('');
+
+      await refreshTeam();
+    } catch (error) {
+      console.error(
+        'Team review failed:',
+        error
+      );
+
+      setActionError(
+        error instanceof Error
+          ? error.message
+          : 'Unable to update the registration.'
+      );
+    } finally {
+      setActionLoading(false);
+    }
   }
 
-  async function viewDocument(docId: string) {
-    const res = await fetch(`/api/admin/documents/${docId}/url`);
-    if (!res.ok) return;
-    const { url } = await res.json();
-    window.open(url, '_blank');
+  /*
+   * ---------------------------------------------------------
+   * PLAYER REVIEW
+   * ---------------------------------------------------------
+   */
+
+  async function handlePlayerAction(
+    playerId: string,
+    action:
+      | 'approve'
+      | 'reject'
+      | 'request_changes'
+  ) {
+    setActionLoading(true);
+    setActionError('');
+    setActionSuccess('');
+
+    try {
+      const result = await reviewPlayer(
+        playerId,
+        action,
+        note.trim() || undefined
+      );
+
+      if (!result?.success) {
+        throw new Error(
+          'The player review action failed.'
+        );
+      }
+
+      const successMessage =
+        action === 'approve'
+          ? 'Player approved successfully.'
+          : action === 'reject'
+            ? 'Player rejected successfully.'
+            : 'Changes requested for player.';
+
+      setActionSuccess(successMessage);
+
+      setNote('');
+
+      await refreshTeam();
+    } catch (error) {
+      console.error(
+        'Player review failed:',
+        error
+      );
+
+      setActionError(
+        error instanceof Error
+          ? error.message
+          : 'Unable to update the player.'
+      );
+    } finally {
+      setActionLoading(false);
+    }
   }
 
-  if (loading || !data) {
+  /*
+   * ---------------------------------------------------------
+   * DELETE TEAM
+   * ---------------------------------------------------------
+   */
+
+  async function handleDeleteTeam() {
+    setDeleteLoading(true);
+    setActionError('');
+    setActionSuccess('');
+
+    try {
+      const result =
+        await deleteTeamRegistration(
+          params.id
+        );
+
+      if (!result?.success) {
+        throw new Error(
+          'Failed to delete the team registration.'
+        );
+      }
+
+      setShowDeleteDialog(false);
+
+      router.push('/admin/teams');
+      router.refresh();
+    } catch (error) {
+      console.error(
+        'Team deletion failed:',
+        error
+      );
+
+      setActionError(
+        error instanceof Error
+          ? error.message
+          : 'Unable to delete the team registration.'
+      );
+
+      setDeleteLoading(false);
+    }
+  }
+
+  /*
+   * ---------------------------------------------------------
+   * LOADING STATE
+   * ---------------------------------------------------------
+   */
+
+  if (loading) {
     return (
-      <main className="mx-auto max-w-4xl px-[16px] md:px-[40px] py-[32px]">
-        <p className="text-outline">Loading…</p>
-      </main>
+      <div className="min-h-screen bg-transparent px-6 py-10">
+        <div className="mx-auto max-w-7xl">
+          <GlassCard>
+            <div className="py-12 text-center">
+              <p className="font-sans text-body-md text-white/60">
+                Loading registration...
+              </p>
+            </div>
+          </GlassCard>
+        </div>
+      </div>
     );
   }
 
-  const team = data.team;
-  const players = team.players ?? [];
-  const docs = players.flatMap((p: any) =>
-    p.documents.map((d: any) => ({ ...d, playerName: `${p.firstName} ${p.lastName}` }))
-  );
-  const isPhase1 = data.phase === 'PHASE_1';
-  const isPhase2 = data.phase === 'PHASE_2';
+  /*
+   * ---------------------------------------------------------
+   * NOT FOUND
+   * ---------------------------------------------------------
+   */
 
-  const tabs: { key: Tab; label: string }[] = [
-    { key: 'overview', label: 'Overview' },
-    { key: 'players', label: `Players (${players.length})` },
-    { key: 'documents', label: `Documents (${docs.length})` },
-    { key: 'activity', label: 'Activity' },
-  ];
+  if (!data) {
+    return (
+      <div className="min-h-screen bg-transparent px-6 py-10">
+        <div className="mx-auto max-w-7xl">
+          <GlassCard>
+            <div className="py-12 text-center">
+              <h1 className="font-sans text-headline-md font-bold text-white">
+                Registration not found
+              </h1>
 
-  return (
-    <main className="mx-auto max-w-4xl px-[16px] md:px-[40px] py-[32px]">
-      <Link
-        href="/admin/teams"
-        className="inline-flex items-center gap-1 font-sans text-body-md text-outline hover:text-on-surface transition-colors"
-      >
-        <ArrowLeft size={14} /> Back to teams
-      </Link>
+              {actionError && (
+                <p className="mt-3 font-sans text-body-md text-error">
+                  {actionError}
+                </p>
+              )}
 
-      <div className="mt-4 flex items-center justify-between">
-        <div>
-          <h1 className="font-sans text-headline-lg font-bold text-on-surface tracking-tight">
-            {team.name}
-          </h1>
-          <div className="mt-1 flex items-center gap-3">
-            <StatusBadge status={data.status} />
-            <span className="font-mono text-label-sm text-outline">
-              {data.phase === 'PHASE_1' ? 'Tournament Participation' : 'Team Details Submission'} ·{' '}
-              {data.division === 'MENS' ? "Men's" : data.division === 'WOMENS' ? "Women's" : '—'}
-            </span>
-          </div>
+              <div className="mt-6">
+                <Link href="/admin/teams">
+                  <GlassButton type="button">
+                    Back to teams
+                  </GlassButton>
+                </Link>
+              </div>
+            </div>
+          </GlassCard>
         </div>
       </div>
+    );
+  }
 
-      <div className="mt-6 flex gap-2 border-b border-white/10 pb-0">
-        {tabs.map((t) => (
-          <button
-            key={t.key}
-            onClick={() => setTab(t.key)}
-            className={`px-4 py-2 font-sans text-body-md font-medium border-b-2 transition-colors ${
-              tab === t.key
-                ? 'border-primary-container text-primary-container'
-                : 'border-transparent text-outline hover:text-on-surface'
-            }`}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
+  /*
+   * ---------------------------------------------------------
+   * DERIVED STATE
+   * ---------------------------------------------------------
+   */
 
-      {tab === 'overview' && (
-        <div className="mt-6 space-y-6">
-          <GlassCard>
-            <h2 className="font-sans text-headline-sm font-bold text-white">Team information</h2>
-            <dl className="mt-4 grid grid-cols-2 gap-4">
-              <div>
-                <dt className="font-mono text-label-sm text-outline">Name</dt>
-                <dd className="font-sans text-body-md text-on-surface">{team.name}</dd>
-              </div>
-              <div>
-                <dt className="font-mono text-label-sm text-outline">Institution</dt>
-                <dd className="font-sans text-body-md text-on-surface">
-                  {team.institutionType?.replace('_', ' ') ?? '—'}
-                </dd>
-              </div>
-              <div>
-                <dt className="font-mono text-label-sm text-outline">Division</dt>
-                <dd className="font-sans text-body-md text-on-surface">
-                  {data.division === 'MENS' ? "Men's Division" : data.division === 'WOMENS' ? "Women's Division" : '—'}
-                </dd>
-              </div>
-              <div>
-                <dt className="font-mono text-label-sm text-outline">Country</dt>
-                <dd className="font-sans text-body-md text-on-surface">{team.country ?? '—'}</dd>
-              </div>
-              <div>
-                <dt className="font-mono text-label-sm text-outline">City</dt>
-                <dd className="font-sans text-body-md text-on-surface">{team.city ?? '—'}</dd>
-              </div>
-              <div>
-                <dt className="font-mono text-label-sm text-outline">Contact email</dt>
-                <dd className="font-sans text-body-md text-on-surface">{team.contactEmail ?? '—'}</dd>
-              </div>
-              <div>
-                <dt className="font-mono text-label-sm text-outline">Contact phone</dt>
-                <dd className="font-sans text-body-md text-on-surface">{team.contactPhone ?? '—'}</dd>
-              </div>
-            </dl>
-          </GlassCard>
+  const isPhase1 =
+    data.phase === 'PHASE_1';
 
-          {isPhase1 && (
-            <GlassCard>
-              <h2 className="font-sans text-headline-sm font-bold text-white">Slot approval</h2>
-              <p className="mt-2 font-sans text-body-md text-outline">
-                Review institution eligibility before approving this team for Phase 2.
+  const isPhase2 =
+    data.phase === 'PHASE_2';
+
+  const isApproved =
+    data.status === 'APPROVED';
+
+  const isRejected =
+    data.status === 'REJECTED';
+
+  const isReviewable =
+    isPhase2 &&
+    (
+      data.status === 'SUBMITTED' ||
+      data.status === 'UNDER_REVIEW' ||
+      data.status === 'RESUBMITTED'
+    );
+
+  const isWaitingForTeam =
+    isPhase2 &&
+    data.status === 'DRAFT';
+
+  const isChangesRequested =
+    isPhase2 &&
+    data.status === 'CHANGES_REQUESTED';
+
+  /*
+   * ---------------------------------------------------------
+   * PAGE
+   * ---------------------------------------------------------
+   */
+
+  return (
+    <div className="min-h-screen bg-transparent px-6 py-10">
+      <div className="mx-auto max-w-7xl">
+
+        {/* -------------------------------------------------
+            HEADER
+        ------------------------------------------------- */}
+
+        <div className="mb-8">
+          <div className="mb-4">
+            <Link
+              href="/admin/teams"
+              className="font-sans text-body-sm text-white/50 transition hover:text-white"
+            >
+              ← Back to teams
+            </Link>
+          </div>
+
+          <div className="flex flex-col gap-5 md:flex-row md:items-start md:justify-between">
+
+            <div>
+              <h1 className="font-sans text-display-sm font-bold text-white">
+                {data.team.name}
+              </h1>
+
+              {data.team.shortName && (
+                <p className="mt-1 font-sans text-body-md text-white/50">
+                  {data.team.shortName}
+                </p>
+              )}
+
+              <p className="mt-2 break-all font-sans text-body-sm text-white/40">
+                Registration ID: {data.id}
               </p>
-              <div className="mt-4">
-                <textarea
-                  value={note}
-                  onChange={(e) => setNote(e.target.value)}
-                  placeholder="Approval note (optional)…"
-                  className="w-full rounded-lg border border-white/10 bg-white/[0.02] px-4 py-3 font-sans text-body-md text-on-surface outline-none placeholder:text-outline/50 focus:border-primary-container/50 focus:ring-1 focus:ring-primary-container/30 min-h-[80px]"
-                />
-              </div>
-              <div className="mt-4 flex gap-3">
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3">
+
+              <StatusBadge
+                status={data.status}
+              />
+
+              <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 font-sans text-body-sm text-white/60">
+                {data.phase}
+              </span>
+
+              <GlassButton
+                type="button"
+                onClick={() => {
+                  setActionError('');
+                  setActionSuccess('');
+                  setShowDeleteDialog(
+                    true
+                  );
+                }}
+                disabled={
+                  actionLoading ||
+                  deleteLoading
+                }
+                className="border-error/30 bg-error/10 text-error hover:bg-error/20"
+              >
+                Delete team
+              </GlassButton>
+
+            </div>
+          </div>
+        </div>
+
+        {/* -------------------------------------------------
+            GLOBAL FEEDBACK
+        ------------------------------------------------- */}
+
+        {actionError && (
+          <div className="mb-6 rounded-lg border border-error/30 bg-error/10 px-4 py-3">
+            <p className="font-sans text-body-md text-error">
+              {actionError}
+            </p>
+          </div>
+        )}
+
+        {actionSuccess && (
+          <div className="mb-6 rounded-lg border border-green-500/30 bg-green-500/10 px-4 py-3">
+            <p className="font-sans text-body-md text-green-400">
+              {actionSuccess}
+            </p>
+          </div>
+        )}
+
+        {/* -------------------------------------------------
+            REGISTRATION STATUS
+        ------------------------------------------------- */}
+
+        <GlassCard className="mb-6">
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+
+            <div>
+              <h2 className="font-sans text-headline-sm font-bold text-white">
+                Registration status
+              </h2>
+
+              <p className="mt-1 font-sans text-body-md text-white/50">
+                Current phase: {data.phase}
+              </p>
+            </div>
+
+            <StatusBadge
+              status={data.status}
+            />
+
+          </div>
+
+          {data.submittedAt && (
+            <div className="mt-5 border-t border-white/10 pt-5">
+              <p className="font-sans text-body-sm text-white/40">
+                Submitted
+              </p>
+
+              <p className="mt-1 font-sans text-body-md text-white">
+                {new Date(
+                  data.submittedAt
+                ).toLocaleString()}
+              </p>
+            </div>
+          )}
+
+          {data.reviewedAt && (
+            <div className="mt-4">
+              <p className="font-sans text-body-sm text-white/40">
+                Last reviewed
+              </p>
+
+              <p className="mt-1 font-sans text-body-md text-white">
+                {new Date(
+                  data.reviewedAt
+                ).toLocaleString()}
+              </p>
+            </div>
+          )}
+
+          {data.internalNotes && (
+            <div className="mt-4">
+              <p className="font-sans text-body-sm text-white/40">
+                Internal notes
+              </p>
+
+              <p className="mt-1 whitespace-pre-wrap font-sans text-body-md text-white/80">
+                {data.internalNotes}
+              </p>
+            </div>
+          )}
+        </GlassCard>
+
+        {/* -------------------------------------------------
+            TEAM INFORMATION
+        ------------------------------------------------- */}
+
+        <GlassCard className="mb-6">
+          <h2 className="font-sans text-headline-sm font-bold text-white">
+            Team information
+          </h2>
+
+          <div className="mt-6 grid gap-5 md:grid-cols-2 lg:grid-cols-3">
+
+            <div>
+              <p className="font-sans text-body-sm text-white/40">
+                Team name
+              </p>
+
+              <p className="mt-1 font-sans text-body-md text-white">
+                {data.team.name || '—'}
+              </p>
+            </div>
+
+            <div>
+              <p className="font-sans text-body-sm text-white/40">
+                Short name
+              </p>
+
+              <p className="mt-1 font-sans text-body-md text-white">
+                {data.team.shortName || '—'}
+              </p>
+            </div>
+
+            <div>
+              <p className="font-sans text-body-sm text-white/40">
+                Institution type
+              </p>
+
+              <p className="mt-1 font-sans text-body-md text-white">
+                {data.team.institutionType ||
+                  '—'}
+              </p>
+            </div>
+
+            <div>
+              <p className="font-sans text-body-sm text-white/40">
+                Registration number
+              </p>
+
+              <p className="mt-1 font-sans text-body-md text-white">
+                {data.team
+                  .clubRegistrationNumber ||
+                  '—'}
+              </p>
+            </div>
+
+            <div>
+              <p className="font-sans text-body-sm text-white/40">
+                Country
+              </p>
+
+              <p className="mt-1 font-sans text-body-md text-white">
+                {data.team.country || '—'}
+              </p>
+            </div>
+
+            <div>
+              <p className="font-sans text-body-sm text-white/40">
+                Region
+              </p>
+
+              <p className="mt-1 font-sans text-body-md text-white">
+                {data.team.region || '—'}
+              </p>
+            </div>
+
+            <div>
+              <p className="font-sans text-body-sm text-white/40">
+                City
+              </p>
+
+              <p className="mt-1 font-sans text-body-md text-white">
+                {data.team.city || '—'}
+              </p>
+            </div>
+
+            <div>
+              <p className="font-sans text-body-sm text-white/40">
+                Contact email
+              </p>
+
+              <p className="mt-1 break-all font-sans text-body-md text-white">
+                {data.team.contactEmail ||
+                  '—'}
+              </p>
+            </div>
+
+            <div>
+              <p className="font-sans text-body-sm text-white/40">
+                Contact phone
+              </p>
+
+              <p className="mt-1 font-sans text-body-md text-white">
+                {data.team.contactPhone ||
+                  '—'}
+              </p>
+            </div>
+
+          </div>
+
+          {data.team.address && (
+            <div className="mt-5">
+              <p className="font-sans text-body-sm text-white/40">
+                Address
+              </p>
+
+              <p className="mt-1 font-sans text-body-md text-white">
+                {data.team.address}
+              </p>
+            </div>
+          )}
+
+          {data.team.description && (
+            <div className="mt-5">
+              <p className="font-sans text-body-sm text-white/40">
+                Description
+              </p>
+
+              <p className="mt-1 whitespace-pre-wrap font-sans text-body-md text-white/80">
+                {data.team.description}
+              </p>
+            </div>
+          )}
+        </GlassCard>
+
+        {/* -------------------------------------------------
+            TOURNAMENT
+        ------------------------------------------------- */}
+
+        <GlassCard className="mb-6">
+          <h2 className="font-sans text-headline-sm font-bold text-white">
+            Tournament
+          </h2>
+
+          <div className="mt-6 grid gap-5 md:grid-cols-2">
+
+            <div>
+              <p className="font-sans text-body-sm text-white/40">
+                Tournament
+              </p>
+
+              <p className="mt-1 font-sans text-body-md text-white">
+                {data.tournament.name}
+              </p>
+            </div>
+
+            <div>
+              <p className="font-sans text-body-sm text-white/40">
+                Division
+              </p>
+
+              <p className="mt-1 font-sans text-body-md text-white">
+                {data.division || '—'}
+              </p>
+            </div>
+
+          </div>
+        </GlassCard>
+
+        {/* -------------------------------------------------
+            PHASE 1 SLOT REVIEW
+        ------------------------------------------------- */}
+
+        {isPhase1 &&
+          data.status === 'SUBMITTED' && (
+            <GlassCard className="mb-6">
+
+              <h2 className="font-sans text-headline-sm font-bold text-white">
+                Slot review
+              </h2>
+
+              <p className="mt-2 font-sans text-body-md text-white/50">
+                Review the team&apos;s Phase 1
+                registration and approve or
+                reject their tournament slot.
+              </p>
+
+              <textarea
+                value={note}
+                onChange={(event) =>
+                  setNote(event.target.value)
+                }
+                placeholder="Add a note or rejection reason..."
+                rows={4}
+                className="mt-6 w-full rounded-lg border border-white/10 bg-white/5 px-4 py-3 font-sans text-body-md text-white outline-none placeholder:text-white/30 focus:border-white/30"
+              />
+
+              <div className="mt-4 flex flex-wrap gap-3">
+
                 <GlassButton
                   type="button"
-                  onClick={handleSlotApprove}
+                  onClick={
+                    handleSlotApprove
+                  }
                   disabled={actionLoading}
                   className="border-green-500/30 bg-green-500/10 text-green-400 hover:bg-green-500/20"
                 >
-                  <CheckCircle size={14} /> Approve slot
+                  {actionLoading
+                    ? 'Processing...'
+                    : 'Approve slot'}
                 </GlassButton>
-              </div>
-              <div className="mt-4 border-t border-white/10 pt-4">
-                <textarea
-                  value={rejectReason}
-                  onChange={(e) => setRejectReason(e.target.value)}
-                  placeholder="Rejection reason (required)…"
-                  className="w-full rounded-lg border border-white/10 bg-white/[0.02] px-4 py-3 font-sans text-body-md text-on-surface outline-none placeholder:text-outline/50 focus:border-error/50 focus:ring-1 focus:ring-error/30 min-h-[80px]"
-                />
+
                 <GlassButton
                   type="button"
                   onClick={handleSlotReject}
-                  disabled={actionLoading || !rejectReason}
-                  className="mt-3 border-error/30 bg-error/10 text-error hover:bg-error/20"
-                >
-                  <XCircle size={14} /> Reject slot
-                </GlassButton>
-              </div>
-            </GlassCard>
-          )}
-
-          {isPhase2 && (
-            <GlassCard>
-              <h2 className="font-sans text-headline-sm font-bold text-white">Officials</h2>
-              <dl className="mt-4 grid grid-cols-2 gap-4">
-                <div>
-                  <dt className="font-mono text-label-sm text-outline">Manager</dt>
-                  <dd className="font-sans text-body-md text-on-surface">{data.managerName ?? '—'}</dd>
-                </div>
-                <div>
-                  <dt className="font-mono text-label-sm text-outline">Coach</dt>
-                  <dd className="font-sans text-body-md text-on-surface">{data.coachName ?? '—'}</dd>
-                </div>
-                <div>
-                  <dt className="font-mono text-label-sm text-outline">Medic</dt>
-                  <dd className="font-sans text-body-md text-on-surface">{data.medicName ?? '—'}</dd>
-                </div>
-                <div>
-                  <dt className="font-mono text-label-sm text-outline">Official</dt>
-                  <dd className="font-sans text-body-md text-on-surface">{data.officialName ?? '—'}</dd>
-                </div>
-              </dl>
-            </GlassCard>
-          )}
-
-          {isPhase2 && (
-            <GlassCard>
-              <h2 className="font-sans text-headline-sm font-bold text-white">Final review actions</h2>
-              <textarea
-                value={note}
-                onChange={(e) => setNote(e.target.value)}
-                placeholder="Add a note (optional)…"
-                className="mt-4 w-full rounded-lg border border-white/10 bg-white/[0.02] px-4 py-3 font-sans text-body-md text-on-surface outline-none placeholder:text-outline/50 focus:border-primary-container/50 focus:ring-1 focus:ring-primary-container/30 min-h-[80px]"
-              />
-              <div className="mt-4 flex gap-3">
-                <GlassButton
-                  type="button"
-                  onClick={() => handleTeamAction('approve')}
-                  disabled={actionLoading}
-                  className="border-green-500/30 bg-green-500/10 text-green-400 hover:bg-green-500/20"
-                >
-                  <CheckCircle size={14} /> Approve
-                </GlassButton>
-                <GlassButton
-                  type="button"
-                  onClick={() => handleTeamAction('request_changes')}
-                  disabled={actionLoading}
-                  className="border-tertiary/30 bg-tertiary/10 text-tertiary hover:bg-tertiary/20"
-                >
-                  <AlertTriangle size={14} /> Request changes
-                </GlassButton>
-                <GlassButton
-                  type="button"
-                  onClick={() => handleTeamAction('reject')}
                   disabled={actionLoading}
                   className="border-error/30 bg-error/10 text-error hover:bg-error/20"
                 >
-                  <XCircle size={14} /> Reject
+                  {actionLoading
+                    ? 'Processing...'
+                    : 'Reject slot'}
                 </GlassButton>
+
               </div>
             </GlassCard>
           )}
-        </div>
-      )}
 
-      {tab === 'players' && (
-        <div className="mt-6 space-y-2">
-          {players.map((p: any) => (
-            <GlassCard key={p.id} className="flex items-center justify-between">
+        {/* -------------------------------------------------
+            PHASE 1 PROCESSED
+        ------------------------------------------------- */}
+
+        {isPhase1 &&
+          data.status !== 'SUBMITTED' && (
+            <GlassCard className="mb-6">
+
+              <h2 className="font-sans text-headline-sm font-bold text-white">
+                Slot review
+              </h2>
+
+              <p className="mt-2 font-sans text-body-md text-white/50">
+                This Phase 1 registration is
+                currently{' '}
+                <span className="text-white">
+                  {data.status}
+                </span>
+                .
+              </p>
+
+            </GlassCard>
+          )}
+
+        {/* -------------------------------------------------
+            MANAGER INFORMATION
+        ------------------------------------------------- */}
+
+        {isPhase2 && (
+          <GlassCard className="mb-6">
+
+            <h2 className="font-sans text-headline-sm font-bold text-white">
+              Team manager
+            </h2>
+
+            <div className="mt-6 grid gap-5 md:grid-cols-2 lg:grid-cols-3">
+
               <div>
-                <p className="font-sans text-body-md font-medium text-on-surface">
-                  {p.firstName} {p.lastName}
+                <p className="font-sans text-body-sm text-white/40">
+                  Name
                 </p>
-                <p className="font-mono text-label-sm text-outline mt-0.5">
-                  {p.position ?? '—'} · #{p.jerseyNumber ?? '—'}
+
+                <p className="mt-1 font-sans text-body-md text-white">
+                  {data.managerName || '—'}
                 </p>
               </div>
-              <div className="flex items-center gap-3">
-                <StatusBadge status={p.status} />
-                {isPhase2 && (
-                  <>
-                    <button
-                      onClick={() => handlePlayerAction(p.id, 'approve')}
-                      className="font-sans text-label-md text-green-400 hover:underline"
+
+              <div>
+                <p className="font-sans text-body-sm text-white/40">
+                  Position
+                </p>
+
+                <p className="mt-1 font-sans text-body-md text-white">
+                  {data.managerPosition ||
+                    '—'}
+                </p>
+              </div>
+
+              <div>
+                <p className="font-sans text-body-sm text-white/40">
+                  Email
+                </p>
+
+                <p className="mt-1 break-all font-sans text-body-md text-white">
+                  {data.managerEmail || '—'}
+                </p>
+              </div>
+
+              <div>
+                <p className="font-sans text-body-sm text-white/40">
+                  Phone
+                </p>
+
+                <p className="mt-1 font-sans text-body-md text-white">
+                  {data.managerPhone || '—'}
+                </p>
+              </div>
+
+              <div>
+                <p className="font-sans text-body-sm text-white/40">
+                  Country
+                </p>
+
+                <p className="mt-1 font-sans text-body-md text-white">
+                  {data.managerCountry ||
+                    '—'}
+                </p>
+              </div>
+
+            </div>
+          </GlassCard>
+        )}
+
+        {/* -------------------------------------------------
+            OFFICIALS
+        ------------------------------------------------- */}
+
+        {isPhase2 && (
+          <GlassCard className="mb-6">
+
+            <h2 className="font-sans text-headline-sm font-bold text-white">
+              Officials
+            </h2>
+
+            <div className="mt-6 grid gap-6 md:grid-cols-2">
+
+              {/* COACH */}
+
+              <div className="rounded-lg border border-white/10 bg-white/5 p-5">
+
+                <h3 className="font-sans text-body-lg font-semibold text-white">
+                  Coach
+                </h3>
+
+                <div className="mt-4 space-y-3">
+
+                  <div>
+                    <p className="font-sans text-body-sm text-white/40">
+                      Name
+                    </p>
+
+                    <p className="font-sans text-body-md text-white">
+                      {data.coachName || '—'}
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="font-sans text-body-sm text-white/40">
+                      Email
+                    </p>
+
+                    <p className="break-all font-sans text-body-md text-white">
+                      {data.coachEmail || '—'}
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="font-sans text-body-sm text-white/40">
+                      Phone
+                    </p>
+
+                    <p className="font-sans text-body-md text-white">
+                      {data.coachPhone || '—'}
+                    </p>
+                  </div>
+
+                </div>
+              </div>
+
+              {/* MEDIC */}
+
+              <div className="rounded-lg border border-white/10 bg-white/5 p-5">
+
+                <h3 className="font-sans text-body-lg font-semibold text-white">
+                  Medic
+                </h3>
+
+                <div className="mt-4 space-y-3">
+
+                  <div>
+                    <p className="font-sans text-body-sm text-white/40">
+                      Name
+                    </p>
+
+                    <p className="font-sans text-body-md text-white">
+                      {data.medicName || '—'}
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="font-sans text-body-sm text-white/40">
+                      Email
+                    </p>
+
+                    <p className="break-all font-sans text-body-md text-white">
+                      {data.medicEmail || '—'}
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="font-sans text-body-sm text-white/40">
+                      Phone
+                    </p>
+
+                    <p className="font-sans text-body-md text-white">
+                      {data.medicPhone || '—'}
+                    </p>
+                  </div>
+
+                </div>
+              </div>
+
+              {/* OFFICIAL */}
+
+              <div className="rounded-lg border border-white/10 bg-white/5 p-5">
+
+                <h3 className="font-sans text-body-lg font-semibold text-white">
+                  Official
+                </h3>
+
+                <div className="mt-4 space-y-3">
+
+                  <div>
+                    <p className="font-sans text-body-sm text-white/40">
+                      Name
+                    </p>
+
+                    <p className="font-sans text-body-md text-white">
+                      {data.officialName ||
+                        '—'}
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="font-sans text-body-sm text-white/40">
+                      Email
+                    </p>
+
+                    <p className="break-all font-sans text-body-md text-white">
+                      {data.officialEmail ||
+                        '—'}
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="font-sans text-body-sm text-white/40">
+                      Phone
+                    </p>
+
+                    <p className="font-sans text-body-md text-white">
+                      {data.officialPhone ||
+                        '—'}
+                    </p>
+                  </div>
+
+                </div>
+              </div>
+
+            </div>
+          </GlassCard>
+        )}
+
+        {/* -------------------------------------------------
+            PLAYERS
+        ------------------------------------------------- */}
+
+        {isPhase2 && (
+          <GlassCard className="mb-6">
+
+            <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+
+              <div>
+                <h2 className="font-sans text-headline-sm font-bold text-white">
+                  Players
+                </h2>
+
+                <p className="mt-1 font-sans text-body-sm text-white/40">
+                  {data.team.players.length}{' '}
+                  player
+                  {data.team.players.length ===
+                  1
+                    ? ''
+                    : 's'} registered
+                </p>
+              </div>
+
+            </div>
+
+            {data.team.players.length ===
+            0 ? (
+              <div className="mt-6 rounded-lg border border-white/10 bg-white/5 p-6 text-center">
+                <p className="font-sans text-body-md text-white/50">
+                  No players have been added
+                  yet.
+                </p>
+              </div>
+            ) : (
+              <div className="mt-6 overflow-x-auto">
+
+                <table className="w-full min-w-[800px]">
+
+                  <thead>
+                    <tr className="border-b border-white/10 text-left">
+
+                      <th className="px-4 py-3 font-sans text-body-sm font-medium text-white/40">
+                        Player
+                      </th>
+
+                      <th className="px-4 py-3 font-sans text-body-sm font-medium text-white/40">
+                        Number
+                      </th>
+
+                      <th className="px-4 py-3 font-sans text-body-sm font-medium text-white/40">
+                        Position
+                      </th>
+
+                      <th className="px-4 py-3 font-sans text-body-sm font-medium text-white/40">
+                        Status
+                      </th>
+
+                      <th className="px-4 py-3 text-right font-sans text-body-sm font-medium text-white/40">
+                        Actions
+                      </th>
+
+                    </tr>
+                  </thead>
+
+                  <tbody>
+
+                    {data.team.players.map(
+                      (player) => (
+                        <tr
+                          key={player.id}
+                          className="border-b border-white/5"
+                        >
+
+                          <td className="px-4 py-4">
+                            <p className="font-sans text-body-md font-medium text-white">
+                              {
+                                player.firstName
+                              }{' '}
+                              {
+                                player.lastName
+                              }
+                            </p>
+                          </td>
+
+                          <td className="px-4 py-4 font-sans text-body-md text-white/70">
+                            {player.jerseyNumber ??
+                              '—'}
+                          </td>
+
+                          <td className="px-4 py-4 font-sans text-body-md text-white/70">
+                            {player.position ||
+                              '—'}
+                          </td>
+
+                          <td className="px-4 py-4">
+                            <StatusBadge
+                              status={
+                                player.status
+                              }
+                            />
+                          </td>
+
+                          <td className="px-4 py-4">
+
+                            <div className="flex justify-end gap-2">
+
+                              {player.status !==
+                                'APPROVED' &&
+                                player.status !==
+                                  'REJECTED' && (
+                                  <>
+                                    <GlassButton
+                                      type="button"
+                                      onClick={() =>
+                                        handlePlayerAction(
+                                          player.id,
+                                          'approve'
+                                        )
+                                      }
+                                      disabled={
+                                        actionLoading
+                                      }
+                                      className="border-green-500/30 bg-green-500/10 text-green-400 hover:bg-green-500/20"
+                                    >
+                                      Approve
+                                    </GlassButton>
+
+                                    <GlassButton
+                                      type="button"
+                                      onClick={() =>
+                                        handlePlayerAction(
+                                          player.id,
+                                          'request_changes'
+                                        )
+                                      }
+                                      disabled={
+                                        actionLoading
+                                      }
+                                      className="border-tertiary/30 bg-tertiary/10 text-tertiary hover:bg-tertiary/20"
+                                    >
+                                      Changes
+                                    </GlassButton>
+
+                                    <GlassButton
+                                      type="button"
+                                      onClick={() =>
+                                        handlePlayerAction(
+                                          player.id,
+                                          'reject'
+                                        )
+                                      }
+                                      disabled={
+                                        actionLoading
+                                      }
+                                      className="border-error/30 bg-error/10 text-error hover:bg-error/20"
+                                    >
+                                      Reject
+                                    </GlassButton>
+                                  </>
+                                )}
+
+                            </div>
+                          </td>
+
+                        </tr>
+                      )
+                    )}
+
+                  </tbody>
+
+                </table>
+              </div>
+            )}
+
+          </GlassCard>
+        )}
+
+        {/* -------------------------------------------------
+            DOCUMENTS
+        ------------------------------------------------- */}
+
+        {isPhase2 && (
+          <GlassCard className="mb-6">
+
+            <h2 className="font-sans text-headline-sm font-bold text-white">
+              Documents
+            </h2>
+
+            {data.officialDocuments &&
+            data.officialDocuments.length >
+              0 ? (
+              <div className="mt-6 space-y-3">
+
+                {data.officialDocuments.map(
+                  (document) => (
+                    <div
+                      key={document.id}
+                      className="flex flex-col gap-3 rounded-lg border border-white/10 bg-white/5 p-4 md:flex-row md:items-center md:justify-between"
                     >
-                      Approve
-                    </button>
-                    <button
-                      onClick={() => handlePlayerAction(p.id, 'request_changes')}
-                      className="font-sans text-label-md text-tertiary hover:underline"
-                    >
-                      Changes
-                    </button>
-                    <button
-                      onClick={() => handlePlayerAction(p.id, 'reject')}
-                      className="font-sans text-label-md text-error hover:underline"
-                    >
-                      Reject
-                    </button>
-                  </>
+
+                      <div>
+
+                        <p className="font-sans text-body-md font-medium text-white">
+                          {
+                            document.documentType
+                          }
+                        </p>
+
+                        <p className="mt-1 font-sans text-body-sm text-white/40">
+                          {
+                            document.originalFilename
+                          }
+                        </p>
+
+                        <p className="mt-1 font-sans text-body-sm text-white/30">
+                          {document.mimeType}
+                        </p>
+
+                      </div>
+
+                      <span className="font-sans text-body-sm text-white/40">
+                        Document uploaded
+                      </span>
+
+                    </div>
+                  )
                 )}
-              </div>
-            </GlassCard>
-          ))}
-          {players.length === 0 && (
-            <p className="text-center font-sans text-body-md text-outline italic py-8">
-              No players.
-            </p>
-          )}
-        </div>
-      )}
 
-      {tab === 'documents' && (
-        <div className="mt-6 space-y-2">
-          {docs.map((d: any) => (
-            <div
-              key={d.id}
-              className="flex items-center justify-between rounded-lg border border-white/5 bg-white/[0.02] px-4 py-3"
-            >
-              <div>
-                <p className="font-sans text-body-md font-medium text-on-surface">
-                  {d.originalFilename}
-                </p>
-                <p className="font-mono text-label-sm text-outline">
-                  {d.playerName} · {d.documentType} · {(d.size / 1024).toFixed(1)} KB
+              </div>
+            ) : (
+              <div className="mt-6 rounded-lg border border-white/10 bg-white/5 p-6 text-center">
+                <p className="font-sans text-body-md text-white/50">
+                  No official documents
+                  found.
                 </p>
               </div>
+            )}
+
+          </GlassCard>
+        )}
+
+        {/* -------------------------------------------------
+            FINAL REVIEW
+        ------------------------------------------------- */}
+
+        {isPhase2 && (
+          <GlassCard className="mb-10">
+
+            <h2 className="font-sans text-headline-sm font-bold text-white">
+              Final review
+            </h2>
+
+            <p className="mt-2 font-sans text-body-md text-white/50">
+              Review the completed Phase 2
+              registration before making the
+              final decision.
+            </p>
+
+            {/* WAITING FOR TEAM */}
+
+            {isWaitingForTeam && (
+              <div className="mt-6 rounded-lg border border-white/10 bg-white/5 px-5 py-4">
+
+                <p className="font-sans text-body-md font-medium text-white">
+                  Awaiting team submission
+                </p>
+
+                <p className="mt-1 font-sans text-body-sm text-white/50">
+                  The team has been approved for
+                  the tournament slot but has not
+                  yet submitted its completed
+                  Phase 2 registration.
+                </p>
+
+              </div>
+            )}
+
+            {/* CHANGES REQUESTED */}
+
+            {isChangesRequested && (
+              <div className="mt-6 rounded-lg border border-tertiary/30 bg-tertiary/10 px-5 py-4">
+
+                <p className="font-sans text-body-md font-medium text-tertiary">
+                  Changes requested
+                </p>
+
+                <p className="mt-1 font-sans text-body-sm text-white/60">
+                  The team must update the
+                  registration and resubmit it
+                  before it can be reviewed again.
+                </p>
+
+                {data.internalNotes && (
+                  <div className="mt-4 border-t border-tertiary/20 pt-4">
+
+                    <p className="font-sans text-body-sm text-white/40">
+                      Review note
+                    </p>
+
+                    <p className="mt-1 whitespace-pre-wrap font-sans text-body-md text-white/80">
+                      {data.internalNotes}
+                    </p>
+
+                  </div>
+                )}
+
+              </div>
+            )}
+
+            {/* APPROVED */}
+
+            {isApproved && (
+              <div className="mt-6 rounded-lg border border-green-500/30 bg-green-500/10 px-5 py-4">
+
+                <p className="font-sans text-body-md font-medium text-green-400">
+                  Registration approved
+                </p>
+
+                <p className="mt-1 font-sans text-body-sm text-white/60">
+                  This registration has already
+                  received final approval.
+                </p>
+
+              </div>
+            )}
+
+            {/* REJECTED */}
+
+            {isRejected && (
+              <div className="mt-6 rounded-lg border border-error/30 bg-error/10 px-5 py-4">
+
+                <p className="font-sans text-body-md font-medium text-error">
+                  Registration rejected
+                </p>
+
+                <p className="mt-1 font-sans text-body-sm text-white/60">
+                  This registration has already
+                  been rejected.
+                </p>
+
+              </div>
+            )}
+
+            {/* REVIEW ACTIONS */}
+
+            {isReviewable && (
+              <>
+                <textarea
+                  value={note}
+                  onChange={(event) =>
+                    setNote(event.target.value)
+                  }
+                  placeholder="Add a note (optional)…"
+                  rows={4}
+                  className="mt-6 w-full rounded-lg border border-white/10 bg-white/5 px-4 py-3 font-sans text-body-md text-white outline-none placeholder:text-white/30 focus:border-white/30"
+                />
+
+                <div className="mt-4 flex flex-wrap gap-3">
+
+                  <GlassButton
+                    type="button"
+                    onClick={() =>
+                      handleTeamAction(
+                        'approve'
+                      )
+                    }
+                    disabled={actionLoading}
+                    className="border-green-500/30 bg-green-500/10 text-green-400 hover:bg-green-500/20"
+                  >
+                    {actionLoading
+                      ? 'Processing...'
+                      : 'Approve'}
+                  </GlassButton>
+
+                  <GlassButton
+                    type="button"
+                    onClick={() =>
+                      handleTeamAction(
+                        'request_changes'
+                      )
+                    }
+                    disabled={actionLoading}
+                    className="border-tertiary/30 bg-tertiary/10 text-tertiary hover:bg-tertiary/20"
+                  >
+                    {actionLoading
+                      ? 'Processing...'
+                      : 'Request changes'}
+                  </GlassButton>
+
+                  <GlassButton
+                    type="button"
+                    onClick={() =>
+                      handleTeamAction(
+                        'reject'
+                      )
+                    }
+                    disabled={actionLoading}
+                    className="border-error/30 bg-error/10 text-error hover:bg-error/20"
+                  >
+                    {actionLoading
+                      ? 'Processing...'
+                      : 'Reject'}
+                  </GlassButton>
+
+                </div>
+              </>
+            )}
+
+          </GlassCard>
+        )}
+
+      </div>
+
+      {/* =====================================================
+          DELETE CONFIRMATION DIALOG
+      ===================================================== */}
+
+      {showDeleteDialog && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-transparent/80 px-4 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="delete-team-title"
+        >
+
+          <div className="w-full max-w-md rounded-2xl border border-error/20 bg-neutral-950 p-6 shadow-2xl">
+
+            <h2
+              id="delete-team-title"
+              className="font-sans text-headline-sm font-bold text-white"
+            >
+              Delete team?
+            </h2>
+
+            <p className="mt-3 font-sans text-body-md leading-relaxed text-white/60">
+              You are about to permanently
+              delete{' '}
+              <span className="font-semibold text-white">
+                {data.team.name}
+              </span>
+              .
+            </p>
+
+            <p className="mt-3 font-sans text-body-sm leading-relaxed text-error/80">
+              This will remove the team,
+              registration, and related records.
+              This action cannot be undone.
+            </p>
+
+            {actionError && (
+              <div className="mt-4 rounded-lg border border-error/30 bg-error/10 px-4 py-3">
+                <p className="font-sans text-body-sm text-error">
+                  {actionError}
+                </p>
+              </div>
+            )}
+
+            <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+
               <GlassButton
                 type="button"
-                variant="ghost"
-                onClick={() => viewDocument(d.id)}
+                onClick={() =>
+                  setShowDeleteDialog(false)
+                }
+                disabled={deleteLoading}
+                className="border-white/10 bg-white/5 text-white hover:bg-white/10"
               >
-                <Eye size={14} /> View
+                Cancel
               </GlassButton>
+
+              <GlassButton
+                type="button"
+                onClick={handleDeleteTeam}
+                disabled={deleteLoading}
+                className="border-error/30 bg-error/10 text-error hover:bg-error/20"
+              >
+                {deleteLoading
+                  ? 'Deleting...'
+                  : 'Yes, delete team'}
+              </GlassButton>
+
             </div>
-          ))}
-          {docs.length === 0 && (
-            <p className="text-center font-sans text-body-md text-outline italic py-8">
-              No documents.
-            </p>
-          )}
+
+          </div>
+
         </div>
       )}
 
-      {tab === 'activity' && (
-        <div className="mt-6 space-y-2">
-          {data.events.map((e: any) => (
-            <div
-              key={e.id}
-              className="flex items-center justify-between rounded-lg border border-white/5 bg-white/[0.02] px-4 py-3"
-            >
-              <div>
-                <p className="font-sans text-body-md text-on-surface">
-                  {e.fromStatus} → {e.toStatus}
-                </p>
-                {e.note && <p className="font-sans text-body-md text-outline mt-0.5">{e.note}</p>}
-              </div>
-              <p className="font-mono text-label-sm text-outline">
-                {new Date(e.createdAt).toLocaleString()}
-              </p>
-            </div>
-          ))}
-          {data.events.length === 0 && (
-            <p className="text-center font-sans text-body-md text-outline italic py-8">
-              No activity yet.
-            </p>
-          )}
-        </div>
-      )}
-    </main>
+    </div>
   );
 }

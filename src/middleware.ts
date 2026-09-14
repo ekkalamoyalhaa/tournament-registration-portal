@@ -1,54 +1,99 @@
-import { getToken } from 'next-auth/jwt';
+import { auth } from '@/lib/auth/auth';
 import { NextResponse } from 'next/server';
-import type { NextRequest } from 'next/server';
 
-export async function middleware(req: NextRequest) {
+export default auth((req) => {
   const { nextUrl } = req;
+  const session = req.auth;
 
-  if (nextUrl.pathname.startsWith('/api/auth')) {
+  const isAuthPage =
+    nextUrl.pathname === '/login' ||
+    nextUrl.pathname === '/register';
+
+  const isAdminPage =
+    nextUrl.pathname.startsWith('/admin');
+
+  const isTeamPage =
+    nextUrl.pathname.startsWith('/team');
+
+  // --------------------------------------------------
+  // Authenticated users visiting login/register
+  // --------------------------------------------------
+  if (isAuthPage && session?.user) {
+    const role = session.user.role;
+
+    if (
+      role === 'TOURNAMENT_ADMIN' ||
+      role === 'SUPER_ADMIN'
+    ) {
+      return NextResponse.redirect(
+        new URL('/admin/dashboard', nextUrl)
+      );
+    }
+
+    const callbackUrl =
+      nextUrl.searchParams.get('callbackUrl') ||
+      '/team/register';
+
+    return NextResponse.redirect(
+      new URL(callbackUrl, nextUrl)
+    );
+  }
+
+  // --------------------------------------------------
+  // Admin routes
+  // --------------------------------------------------
+  if (isAdminPage) {
+    if (!session?.user) {
+      const loginUrl = new URL('/login', nextUrl);
+
+      loginUrl.searchParams.set(
+        'callbackUrl',
+        nextUrl.pathname
+      );
+
+      return NextResponse.redirect(loginUrl);
+    }
+
+    const role = session.user.role;
+
+    if (
+      role !== 'TOURNAMENT_ADMIN' &&
+      role !== 'SUPER_ADMIN'
+    ) {
+      return NextResponse.redirect(
+        new URL('/', nextUrl)
+      );
+    }
+
     return NextResponse.next();
   }
 
-  const token = await getToken({ req, secret: process.env.AUTH_SECRET });
+  // --------------------------------------------------
+  // Team routes
+  // --------------------------------------------------
+  if (isTeamPage) {
+    if (!session?.user) {
+      const loginUrl = new URL('/login', nextUrl);
 
-  // Authenticated users shouldn't linger on login/register pages
-  if (nextUrl.pathname === '/login' || nextUrl.pathname === '/register') {
-    if (token) {
-      const role = token.role as string | undefined;
-      if (role === 'TOURNAMENT_ADMIN' || role === 'SUPER_ADMIN') {
-        return NextResponse.redirect(new URL('/admin/dashboard', nextUrl));
-      }
-      const cb = nextUrl.searchParams.get('callbackUrl') ?? '/team/register';
-      return NextResponse.redirect(new URL(cb, nextUrl));
-    }
-    return NextResponse.next();
-  }
+      loginUrl.searchParams.set(
+        'callbackUrl',
+        nextUrl.pathname
+      );
 
-  if (nextUrl.pathname.startsWith('/admin')) {
-    if (!token) {
-      const login = new URL('/login', nextUrl);
-      login.searchParams.set('callbackUrl', nextUrl.pathname);
-      return NextResponse.redirect(login);
+      return NextResponse.redirect(loginUrl);
     }
-    const role = token.role as string | undefined;
-    if (role !== 'TOURNAMENT_ADMIN' && role !== 'SUPER_ADMIN') {
-      return NextResponse.redirect(new URL('/', nextUrl));
-    }
-    return NextResponse.next();
-  }
 
-  if (nextUrl.pathname.startsWith('/team')) {
-    if (!token) {
-      const login = new URL('/login', nextUrl);
-      login.searchParams.set('callbackUrl', nextUrl.pathname);
-      return NextResponse.redirect(login);
-    }
     return NextResponse.next();
   }
 
   return NextResponse.next();
-}
+});
 
 export const config = {
-  matcher: ['/admin/:path*', '/team/:path*', '/login', '/register'],
+  matcher: [
+    '/admin/:path*',
+    '/team/:path*',
+    '/login',
+    '/register',
+  ],
 };

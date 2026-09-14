@@ -1,6 +1,3 @@
-// Tournament Registration Portal — data model
-// Reflects PRD sections 6, 19, 20, 30, 31 + Gaafu Phase 1/2, Division, Institution, Officials
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -10,7 +7,344 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// ---------- Enums ----------
+model User {
+  id              String           @id @default(uuid())
+  email           String           @unique
+  emailVerifiedAt DateTime?
+  passwordHash    String
+  firstName       String
+  lastName        String
+  phone           String?
+  role            GlobalRole       @default(TEAM_MANAGER)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  accounts        Account[]
+  auditLogs       AuditLog[]
+  sessions        Session[]
+  teamMemberships TeamMembership[]
+
+  @@map("users")
+}
+
+model Account {
+  id                String  @id @default(uuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(uuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model Tournament {
+  id                   String                  @id @default(uuid())
+  slug                 String                  @unique
+  name                 String
+  description          String?
+  logoStorageKey       String?
+  bannerStorageKey     String?
+  venue                String?
+  startDate            DateTime?
+  endDate              DateTime?
+  registrationOpensAt  DateTime?
+  registrationClosesAt DateTime?
+  status               TournamentStatus        @default(DRAFT)
+  availableTeamSlots   Int?
+  minPlayers           Int?
+  maxPlayers           Int?
+  rules                String?
+  eligibility          String?
+  contactInfo          String?
+  createdAt            DateTime                @default(now())
+  updatedAt            DateTime                @updatedAt
+  fixtures             Fixture[]
+  registrations        TeamRegistration[]
+  announcements        Announcement[]
+  requirements         TournamentRequirement[]
+  venues               Venue[]
+
+  @@map("tournaments")
+}
+
+model TournamentRequirement {
+  id           String     @id @default(uuid())
+  tournamentId String
+  fieldKey     String
+  fieldLabel   String
+  isRequired   Boolean    @default(true)
+  category     String
+  tournament   Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+
+  @@unique([tournamentId, fieldKey])
+  @@map("tournament_requirements")
+}
+
+model Venue {
+  id           String     @id @default(uuid())
+  tournamentId String
+  name         String
+  address      String?
+  fixtures     Fixture[]
+  tournament   Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+
+  @@map("venues")
+}
+
+model Team {
+  id                     String             @id @default(uuid())
+  name                   String
+  shortName              String?
+  clubRegistrationNumber String?
+  country                String?
+  region                 String?
+  city                   String?
+  address                String?
+  contactEmail           String?
+  contactPhone           String?
+  website                String?
+  socialMedia            String?
+  description            String?
+  logoStorageKey         String?
+  createdAt              DateTime           @default(now())
+  updatedAt              DateTime           @updatedAt
+  institutionType        InstitutionType?
+  players                Player[]
+  documents              TeamDocument[]
+  members                TeamMembership[]
+  registrations          TeamRegistration[]
+
+  @@map("teams")
+}
+
+model TeamMembership {
+  id         String     @id @default(uuid())
+  userId     String
+  teamId     String
+  role       GlobalRole @default(TEAM_MANAGER)
+  invitedAt  DateTime   @default(now())
+  acceptedAt DateTime?
+  team       Team       @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, teamId])
+  @@map("team_members")
+}
+
+model TeamRegistration {
+  id                    String              @id @default(uuid())
+  teamId                String
+  tournamentId          String
+  status                RegistrationStatus  @default(DRAFT)
+  managerName           String?
+  managerPosition       String?
+  managerEmail          String?
+  managerPhone          String?
+  managerCountry        String?
+  assistantManagerName  String?
+  assistantManagerEmail String?
+  assistantManagerPhone String?
+  submittedAt           DateTime?
+  reviewedAt            DateTime?
+  approvedAt            DateTime?
+  internalNotes         String?
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+  coachEmail            String?
+  coachIdDocKey         String?
+  coachName             String?
+  coachPhone            String?
+  coachPhotoKey         String?
+  division              Division?
+  managerIdDocKey       String?
+  managerPhotoKey       String?
+  medicEmail            String?
+  medicIdDocKey         String?
+  medicName             String?
+  medicPhone            String?
+  medicPhotoKey         String?
+  officialEmail         String?
+  officialIdDocKey      String?
+  officialName          String?
+  officialPhone         String?
+  officialPhotoKey      String?
+  phase                 RegistrationPhase   @default(PHASE_1)
+  slotApprovedAt        DateTime?
+  slotApprovedBy        String?
+  slotRejectionReason   String?
+  coachIdNumber         String?
+  managerIdNumber       String?
+  medicIdNumber         String?
+  officialIdNumber      String?
+  events                RegistrationEvent[]
+  team                  Team                @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  tournament            Tournament          @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+
+  @@unique([teamId, tournamentId])
+  @@map("team_registrations")
+}
+
+model RegistrationEvent {
+  id                 String              @id @default(uuid())
+  teamRegistrationId String
+  fromStatus         RegistrationStatus?
+  toStatus           RegistrationStatus
+  actorUserId        String?
+  note               String?
+  createdAt          DateTime            @default(now())
+  teamRegistration   TeamRegistration    @relation(fields: [teamRegistrationId], references: [id], onDelete: Cascade)
+
+  @@map("registration_events")
+}
+
+model TeamDocument {
+  id               String             @id @default(uuid())
+  teamId           String
+  storageKey       String             @unique
+  originalFilename String
+  mimeType         String
+  size             Int
+  visibility       DocumentVisibility @default(PUBLIC)
+  createdAt        DateTime           @default(now())
+  team             Team               @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@map("team_documents")
+}
+
+model Player {
+  id                    String           @id @default(uuid())
+  teamId                String
+  firstName             String
+  middleName            String?
+  lastName              String
+  idNumber              String?
+  preferredName         String?
+  dateOfBirth           DateTime?
+  nationality           String?
+  countryOfResidence    String?
+  gender                String?
+  jerseyNumber          Int?
+  position              String?
+  height                Int?
+  phone                 String?
+  email                 String?
+  emergencyContact      String?
+  emergencyContactPhone String?
+  status                PlayerStatus     @default(DRAFT)
+  createdAt             DateTime         @default(now())
+  updatedAt             DateTime         @updatedAt
+  documents             PlayerDocument[]
+  team                  Team             @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@map("players")
+}
+
+model PlayerDocument {
+  id                String             @id @default(uuid())
+  playerId          String?
+  documentType      String
+  storageKey        String             @unique
+  originalFilename  String
+  mimeType          String
+  size              Int
+  visibility        DocumentVisibility @default(PRIVATE)
+  changeRequestNote String?
+  createdAt         DateTime           @default(now())
+  officialRole      String?
+  player            Player?            @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@map("player_documents")
+}
+
+model Fixture {
+  id           String     @id @default(uuid())
+  tournamentId String
+  venueId      String?
+  round        String?
+  group        String?
+  matchNumber  Int?
+  kickoffAt    DateTime?
+  teamAId      String?
+  teamBId      String?
+  scoreA       Int?
+  scoreB       Int?
+  status       String     @default("SCHEDULED")
+  isPublished  Boolean    @default(false)
+  tournament   Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  venue        Venue?     @relation(fields: [venueId], references: [id])
+
+  @@map("fixtures")
+}
+
+model Announcement {
+  id           String             @id @default(uuid())
+  tournamentId String
+  title        String
+  body         String
+  status       AnnouncementStatus @default(DRAFT)
+  publishedAt  DateTime?
+  createdAt    DateTime           @default(now())
+  tournament   Tournament         @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+
+  @@map("tournament_announcements")
+}
+
+model AuditLog {
+  id            String   @id @default(uuid())
+  userId        String?
+  action        String
+  resourceType  String
+  resourceId    String
+  previousState Json?
+  newState      Json?
+  ipAddress     String?
+  metadata      Json?
+  createdAt     DateTime @default(now())
+  user          User?    @relation(fields: [userId], references: [id])
+
+  @@map("audit_logs")
+}
+
+model Notification {
+  id        String    @id @default(uuid())
+  userId    String
+  type      String
+  channel   String    @default("email")
+  payload   Json?
+  sentAt    DateTime?
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@map("notifications")
+}
+
+model VerificationToken {
+  id        String   @id @default(cuid())
+  email     String
+  token     String   @unique
+  expires   DateTime
+  createdAt DateTime @default(now())
+
+  @@index([email])
+}
 
 enum GlobalRole {
   TEAM_MANAGER
@@ -58,7 +392,6 @@ enum DocumentVisibility {
   PRIVATE
 }
 
-// Gaafu additions
 enum InstitutionType {
   UNIVERSITY
   COLLEGE
@@ -73,384 +406,4 @@ enum Division {
 enum RegistrationPhase {
   PHASE_1
   PHASE_2
-}
-
-// ---------- Identity ----------
-
-model User {
-  id                String    @id @default(uuid())
-  email             String    @unique
-  emailVerifiedAt   DateTime?
-  passwordHash      String
-  firstName         String
-  lastName          String
-  phone             String?
-  role              GlobalRole @default(TEAM_MANAGER)
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
-
-  teamMemberships   TeamMembership[]
-  auditLogs         AuditLog[]
-  sessions          Session[]
-  accounts          Account[]
-
-  @@map("users")
-}
-
-// Auth.js required tables
-model Account {
-  id                String  @id @default(uuid())
-  userId            String
-  type              String
-  provider          String
-  providerAccountId String
-  refresh_token     String?
-  access_token      String?
-  expires_at        Int?
-  token_type        String?
-  scope             String?
-  id_token          String?
-  session_state     String?
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@unique([provider, providerAccountId])
-  @@map("accounts")
-}
-
-model Session {
-  id           String   @id @default(uuid())
-  sessionToken String   @unique
-  userId       String
-  expires      DateTime
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@map("sessions")
-}
-
-// ---------- Tournament ----------
-
-model Tournament {
-  id                    String            @id @default(uuid())
-  slug                  String            @unique
-  name                  String
-  description           String?
-  logoStorageKey        String?
-  bannerStorageKey      String?
-  venue                 String?
-  startDate             DateTime?
-  endDate               DateTime?
-  registrationOpensAt   DateTime?
-  registrationClosesAt  DateTime?
-  status                TournamentStatus  @default(DRAFT)
-  availableTeamSlots    Int?
-  minPlayers            Int?
-  maxPlayers            Int?
-  rules                 String?
-  eligibility           String?
-  contactInfo           String?
-  createdAt             DateTime          @default(now())
-  updatedAt             DateTime          @updatedAt
-
-  requirements          TournamentRequirement[]
-  registrations         TeamRegistration[]
-  fixtures              Fixture[]
-  announcements         Announcement[]
-  venues                Venue[]
-
-  @@map("tournaments")
-}
-
-model TournamentRequirement {
-  id           String     @id @default(uuid())
-  tournamentId String
-  fieldKey     String
-  fieldLabel   String
-  isRequired   Boolean    @default(true)
-  category     String
-
-  tournament Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
-
-  @@unique([tournamentId, fieldKey])
-  @@map("tournament_requirements")
-}
-
-model Venue {
-  id           String     @id @default(uuid())
-  tournamentId String
-  name         String
-  address      String?
-
-  tournament Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
-  fixtures   Fixture[]
-
-  @@map("venues")
-}
-
-// ---------- Team ----------
-
-model Team {
-  id                String   @id @default(uuid())
-  name              String
-  shortName         String?
-  clubRegistrationNumber String?
-  country           String?
-  region            String?
-  city              String?
-  address           String?
-  contactEmail      String?
-  contactPhone      String?
-  website           String?
-  socialMedia       String?
-  description       String?
-  logoStorageKey    String?
-  institutionType   InstitutionType?
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-
-  members       TeamMembership[]
-  registrations TeamRegistration[]
-  documents     TeamDocument[]
-  players       Player[]
-
-  @@map("teams")
-}
-
-model TeamMembership {
-  id       String   @id @default(uuid())
-  userId   String
-  teamId   String
-  role     GlobalRole @default(TEAM_MANAGER)
-  invitedAt DateTime @default(now())
-  acceptedAt DateTime?
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
-
-  @@unique([userId, teamId])
-  @@map("team_members")
-}
-
-model TeamRegistration {
-  id             String              @id @default(uuid())
-  teamId         String
-  tournamentId   String
-  status         RegistrationStatus  @default(DRAFT)
-  phase          RegistrationPhase   @default(PHASE_1)
-  division       Division?
-  managerIdNumber     String?
-  coachIdNumber       String?
-  medicIdNumber       String?
-  officialIdNumber    String?
-
-  // Slot approval
-  slotApprovedAt      DateTime?
-  slotApprovedBy      String?
-  slotRejectionReason String?
-
-  // Manager
-  managerName    String?
-  managerPosition String?
-  managerEmail   String?
-  managerPhone   String?
-  managerCountry String?
-  managerPhotoKey     String?
-  managerIdDocKey     String?
-
-  // Assistant manager (legacy)
-  assistantManagerName  String?
-  assistantManagerEmail String?
-  assistantManagerPhone String?
-
-  // Coach
-  coachName       String?
-  coachEmail      String?
-  coachPhone      String?
-  coachPhotoKey   String?
-  coachIdDocKey   String?
-
-  // Medic
-  medicName       String?
-  medicEmail      String?
-  medicPhone      String?
-  medicPhotoKey   String?
-  medicIdDocKey   String?
-
-  // Additional Official
-  officialName       String?
-  officialEmail      String?
-  officialPhone      String?
-  officialPhotoKey   String?
-  officialIdDocKey   String?
-
-  submittedAt    DateTime?
-  reviewedAt     DateTime?
-  approvedAt     DateTime?
-  internalNotes  String?
-  createdAt      DateTime            @default(now())
-  updatedAt      DateTime            @updatedAt
-
-  team       Team       @relation(fields: [teamId], references: [id], onDelete: Cascade)
-  tournament Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
-  events     RegistrationEvent[]
-
-  @@unique([teamId, tournamentId])
-  @@map("team_registrations")
-}
-
-model RegistrationEvent {
-  id                  String   @id @default(uuid())
-  teamRegistrationId  String
-  fromStatus          RegistrationStatus?
-  toStatus            RegistrationStatus
-  actorUserId         String?
-  note                String?
-  createdAt           DateTime @default(now())
-
-  teamRegistration TeamRegistration @relation(fields: [teamRegistrationId], references: [id], onDelete: Cascade)
-
-  @@map("registration_events")
-}
-
-model TeamDocument {
-  id               String   @id @default(uuid())
-  teamId           String
-  storageKey       String   @unique
-  originalFilename String
-  mimeType         String
-  size             Int
-  visibility       DocumentVisibility @default(PUBLIC)
-  createdAt        DateTime @default(now())
-
-  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
-
-  @@map("team_documents")
-}
-
-// ---------- Players ----------
-
-model Player {
-  id                    String       @id @default(uuid())
-  teamId                String
-  firstName             String
-  middleName            String?
-  lastName              String
-  preferredName         String?
-  dateOfBirth           DateTime?
-  nationality           String?
-  countryOfResidence    String?
-  gender                String?
-  jerseyNumber          Int?
-  position              String?
-  height                Int?
-  phone                 String?
-  email                 String?
-  emergencyContact      String?
-  emergencyContactPhone String?
-  status                PlayerStatus @default(DRAFT)
-  createdAt             DateTime     @default(now())
-  updatedAt             DateTime     @updatedAt
-
-  team      Team             @relation(fields: [teamId], references: [id], onDelete: Cascade)
-  documents PlayerDocument[]
-
-  @@map("players")
-}
-
-model PlayerDocument {
-  id                String   @id @default(uuid())
-  playerId          String?
-  officialRole      String?
-  documentType      String
-  storageKey        String   @unique
-  originalFilename  String
-  mimeType          String
-  size              Int
-  visibility        DocumentVisibility @default(PRIVATE)
-  changeRequestNote String?
-  createdAt         DateTime @default(now())
-
-  player Player? @relation(fields: [playerId], references: [id], onDelete: Cascade)
-
-  @@map("player_documents")
-}
-
-// ---------- Fixtures & Announcements ----------
-
-model Fixture {
-  id           String     @id @default(uuid())
-  tournamentId String
-  venueId      String?
-  round        String?
-  group        String?
-  matchNumber  Int?
-  kickoffAt    DateTime?
-  teamAId      String?
-  teamBId      String?
-  scoreA       Int?
-  scoreB       Int?
-  status       String     @default("SCHEDULED")
-  isPublished  Boolean    @default(false)
-
-  tournament Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
-  venue      Venue?     @relation(fields: [venueId], references: [id])
-
-  @@map("fixtures")
-}
-
-model Announcement {
-  id           String             @id @default(uuid())
-  tournamentId String
-  title        String
-  body         String
-  status       AnnouncementStatus @default(DRAFT)
-  publishedAt  DateTime?
-  createdAt    DateTime           @default(now())
-
-  tournament Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
-
-  @@map("tournament_announcements")
-}
-
-// ---------- Cross-cutting ----------
-
-model AuditLog {
-  id           String   @id @default(uuid())
-  userId       String?
-  action       String
-  resourceType String
-  resourceId   String
-  previousState Json?
-  newState     Json?
-  ipAddress    String?
-  metadata     Json?
-  createdAt    DateTime @default(now())
-
-  user User? @relation(fields: [userId], references: [id])
-
-  @@map("audit_logs")
-}
-
-model Notification {
-  id        String   @id @default(uuid())
-  userId    String
-  type      String
-  channel   String   @default("email")
-  payload   Json?
-  sentAt    DateTime?
-  readAt    DateTime?
-  createdAt DateTime @default(now())
-
-  @@map("notifications")
-}
-
-model VerificationToken {
-  id        String   @id @default(cuid())
-  email     String
-  token     String   @unique
-  expires   DateTime
-  createdAt DateTime @default(now())
-
-  @@index([email])
 }
