@@ -1,3 +1,4 @@
+
 'use server';
 
 import { prisma } from '@/lib/db/prisma';
@@ -11,7 +12,7 @@ import {
 } from '@prisma/client';
 
 /* =========================================================
-   HELPERS
+   AUTH / HELPERS
    ========================================================= */
 
 async function getUser() {
@@ -35,29 +36,21 @@ async function getUser() {
 }
 
 async function getOpenTournament() {
-  let tournament = await prisma.tournament.findFirst({
-    where: {
-      status: 'OPEN_FOR_REGISTRATION',
-    },
-    orderBy: {
-      createdAt: 'desc',
-    },
-  });
-
-  if (!tournament) {
-    tournament = await prisma.tournament.create({
-      data: {
-        slug: '2026-gaafu-championship',
-        name: '2026 Gaafu Championship',
+  const tournament =
+    await prisma.tournament.findFirst({
+      where: {
         status: 'OPEN_FOR_REGISTRATION',
-        startDate: new Date('2026-12-12'),
-        endDate: new Date('2026-12-20'),
-        registrationClosesAt: new Date('2026-11-30'),
-        availableTeamSlots: 42,
-        minPlayers: 8,
-        maxPlayers: 10,
+      },
+
+      orderBy: {
+        createdAt: 'desc',
       },
     });
+
+  if (!tournament) {
+    throw new Error(
+      'No tournament is currently open for registration.'
+    );
   }
 
   return tournament;
@@ -67,16 +60,6 @@ async function getOpenTournament() {
    REGISTRATION ACCESS
    ========================================================= */
 
-/**
- * Get one specific registration.
- *
- * IMPORTANT:
- * registrationId MUST belong to a team that the currently
- * authenticated user is a member of.
- *
- * This is the main authorization boundary for the
- * multi-team registration system.
- */
 async function getRegistrationById(
   registrationId: string
 ) {
@@ -101,6 +84,8 @@ async function getRegistrationById(
 
         team: {
           include: {
+            documents: true,
+
             players: {
               include: {
                 documents: true,
@@ -127,38 +112,25 @@ async function getRegistrationById(
   };
 }
 
-/**
- * Get an existing registration when an ID is supplied.
- *
- * Without an ID:
- * - Find exactly one Phase 1 DRAFT registration.
- * - If multiple exist, DO NOT guess.
- * - If none exist, create a new Phase 1 registration.
- *
- * This prevents one user with multiple teams from
- * accidentally editing the wrong team.
- */
+/* =========================================================
+   GET / CREATE REGISTRATION
+   ========================================================= */
+
 export async function getOrCreateDraftRegistration(
   registrationId?: string
 ) {
-  /* ---------------------------------------------------------
-     SPECIFIC REGISTRATION
-     --------------------------------------------------------- */
-
+  /*
+   * If an explicit registrationId was provided,
+   * ALWAYS use that exact registration.
+   */
   if (registrationId) {
-    return getRegistrationById(registrationId);
+    return getRegistrationById(
+      registrationId
+    );
   }
-
-  /* ---------------------------------------------------------
-     NO REGISTRATION ID
-     --------------------------------------------------------- */
 
   const user = await getUser();
 
-  /*
-   * Find ALL Phase 1 draft registrations belonging to teams
-   * that this user is a member of.
-   */
   const memberships =
     await prisma.teamMembership.findMany({
       where: {
@@ -167,8 +139,18 @@ export async function getOrCreateDraftRegistration(
         team: {
           registrations: {
             some: {
-              status: RegistrationStatus.DRAFT,
               phase: 'PHASE_1',
+
+              OR: [
+                {
+                  status:
+                    RegistrationStatus.DRAFT,
+                },
+                {
+                  status:
+                    RegistrationStatus.CHANGES_REQUESTED,
+                },
+              ],
             },
           },
         },
@@ -179,8 +161,18 @@ export async function getOrCreateDraftRegistration(
           include: {
             registrations: {
               where: {
-                status: RegistrationStatus.DRAFT,
                 phase: 'PHASE_1',
+
+                OR: [
+                  {
+                    status:
+                      RegistrationStatus.DRAFT,
+                  },
+                  {
+                    status:
+                      RegistrationStatus.CHANGES_REQUESTED,
+                  },
+                ],
               },
 
               include: {
@@ -202,48 +194,41 @@ export async function getOrCreateDraftRegistration(
       },
     });
 
-  const draftRegistrations = memberships
-    .map((membership) => {
-      const registration =
-        membership.team.registrations[0];
+  const draftRegistrations =
+    memberships
+      .map((membership) => {
+        const registration =
+          membership.team.registrations[0];
 
-      if (!registration) {
-        return null;
-      }
+        if (!registration) {
+          return null;
+        }
 
-      return {
-        team: membership.team,
-        registration,
-      };
-    })
-    .filter(
-      (
-        value
-      ): value is NonNullable<typeof value> =>
-        value !== null
-    );
+        return {
+          team: membership.team,
+          registration,
+        };
+      })
+      .filter(
+        (
+          value
+        ): value is NonNullable<typeof value> =>
+          value !== null
+      );
 
-  /* ---------------------------------------------------------
-     EXACTLY ONE DRAFT
-     --------------------------------------------------------- */
-
-  if (draftRegistrations.length === 1) {
+  if (
+    draftRegistrations.length === 1
+  ) {
     return draftRegistrations[0];
   }
 
-  /* ---------------------------------------------------------
-     MULTIPLE DRAFTS
-     --------------------------------------------------------- */
-
-  if (draftRegistrations.length > 1) {
+  if (
+    draftRegistrations.length > 1
+  ) {
     throw new Error(
       'Multiple team registrations found. Please select a team from the dashboard.'
     );
   }
-
-  /* ---------------------------------------------------------
-     NO DRAFT — CREATE NEW PHASE 1 TEAM
-     --------------------------------------------------------- */
 
   const tournament =
     await getOpenTournament();
@@ -292,14 +277,6 @@ export async function startNewTeamRegistration() {
   const { registration } =
     await createNewTeamRegistration();
 
-  /*
-   * IMPORTANT:
-   * Carry the newly-created registration ID into the
-   * registration page.
-   *
-   * This prevents the page from selecting another draft
-   * when the user already has multiple teams.
-   */
   redirect(
     `/team/register?registrationId=${encodeURIComponent(
       registration.id
@@ -318,11 +295,14 @@ export async function saveTeamInfo(
   const {
     team,
     registration,
-  } = await getOrCreateDraftRegistration(
-    registrationId
-  );
+  } =
+    await getOrCreateDraftRegistration(
+      registrationId
+    );
 
-  if (registration.phase !== 'PHASE_1') {
+  if (
+    registration.phase !== 'PHASE_1'
+  ) {
     throw new Error(
       'Team information can only be edited in Phase 1.'
     );
@@ -330,7 +310,9 @@ export async function saveTeamInfo(
 
   if (
     registration.status !==
-    RegistrationStatus.DRAFT
+      RegistrationStatus.DRAFT &&
+    registration.status !==
+      RegistrationStatus.CHANGES_REQUESTED
   ) {
     throw new Error(
       'This registration cannot be edited in its current status.'
@@ -344,8 +326,10 @@ export async function saveTeamInfo(
     formData.get('division');
 
   const institutionType =
-    institutionTypeValue === 'UNIVERSITY' ||
-    institutionTypeValue === 'COLLEGE' ||
+    institutionTypeValue ===
+      'UNIVERSITY' ||
+    institutionTypeValue ===
+      'COLLEGE' ||
     institutionTypeValue ===
       'HIGHER_EDUCATION_INSTITUTE'
       ? institutionTypeValue
@@ -357,7 +341,7 @@ export async function saveTeamInfo(
       ? divisionValue
       : null;
 
-  const updated =
+  const updatedTeam =
     await prisma.team.update({
       where: {
         id: team.id,
@@ -412,17 +396,22 @@ export async function saveTeamInfo(
     },
   });
 
-  revalidatePath('/team/register');
-  revalidatePath('/team/dashboard');
+  revalidatePath(
+    '/team/register'
+  );
+
+  revalidatePath(
+    '/team/dashboard'
+  );
 
   return {
     success: true,
-    team: updated,
+    team: updatedTeam,
   };
 }
 
 /* =========================================================
-   PHASE 1 SUBMISSION
+   PHASE 1 — SUBMIT
    ========================================================= */
 
 export async function submitPhase1(
@@ -431,11 +420,14 @@ export async function submitPhase1(
   const {
     team,
     registration,
-  } = await getOrCreateDraftRegistration(
-    registrationId
-  );
+  } =
+    await getOrCreateDraftRegistration(
+      registrationId
+    );
 
-  if (registration.phase !== 'PHASE_1') {
+  if (
+    registration.phase !== 'PHASE_1'
+  ) {
     return {
       error: 'Not in Phase 1.',
     };
@@ -443,7 +435,9 @@ export async function submitPhase1(
 
   if (
     registration.status !==
-    RegistrationStatus.DRAFT
+      RegistrationStatus.DRAFT &&
+    registration.status !==
+      RegistrationStatus.CHANGES_REQUESTED
   ) {
     return {
       error:
@@ -453,15 +447,41 @@ export async function submitPhase1(
 
   if (
     !team.name ||
-    team.name === 'Draft Team' ||
-    !team.institutionType ||
-    !registration.division
+    team.name === 'Draft Team'
   ) {
     return {
       error:
-        'Complete all required fields before submitting.',
+        'Team name is required.',
     };
   }
+
+  if (!team.institutionType) {
+    return {
+      error:
+        'Institution type is required.',
+    };
+  }
+
+  if (!registration.division) {
+    return {
+      error:
+        'Division is required.',
+    };
+  }
+
+  const isResubmission =
+    registration.status ===
+    RegistrationStatus.CHANGES_REQUESTED;
+
+  const newStatus =
+    isResubmission
+      ? RegistrationStatus.RESUBMITTED
+      : RegistrationStatus.SUBMITTED;
+
+  const fromStatus =
+    isResubmission
+      ? RegistrationStatus.CHANGES_REQUESTED
+      : RegistrationStatus.DRAFT;
 
   const updated =
     await prisma.teamRegistration.update({
@@ -470,11 +490,9 @@ export async function submitPhase1(
       },
 
       data: {
-        status:
-          RegistrationStatus.SUBMITTED,
-
-        submittedAt:
-          new Date(),
+        status: newStatus,
+        submittedAt: new Date(),
+        reviewedAt: null,
       },
     });
 
@@ -483,19 +501,24 @@ export async function submitPhase1(
       teamRegistrationId:
         registration.id,
 
-      fromStatus:
-        RegistrationStatus.DRAFT,
+      fromStatus,
 
       toStatus:
-        RegistrationStatus.SUBMITTED,
+        newStatus,
 
-      note:
-        'Team submitted Tournament Participation Form for Approval',
+      note: isResubmission
+        ? 'Team resubmitted Phase 1 registration after requested changes.'
+        : 'Team submitted Phase 1 registration.',
     },
   });
 
-  revalidatePath('/team/dashboard');
-  revalidatePath('/team/register');
+  revalidatePath(
+    '/team/dashboard'
+  );
+
+  revalidatePath(
+    '/team/register'
+  );
 
   return {
     success: true,
@@ -507,7 +530,9 @@ export async function submitPhase1(
    DASHBOARD
    ========================================================= */
 
-export async function getTeamDashboardData() {
+export async function getTeamDashboardData(
+  registrationId?: string
+) {
   const user = await getUser();
 
   const memberships =
@@ -519,6 +544,8 @@ export async function getTeamDashboardData() {
       include: {
         team: {
           include: {
+            documents: true,
+
             registrations: {
               include: {
                 tournament: true,
@@ -535,8 +562,6 @@ export async function getTeamDashboardData() {
               orderBy: {
                 createdAt: 'desc',
               },
-
-              take: 1,
             },
 
             players: {
@@ -557,19 +582,306 @@ export async function getTeamDashboardData() {
       },
     });
 
-  return memberships.map(
-    (membership) => ({
-      team: membership.team,
+  /* ---------------------------------------------------------
+     ALL REGISTRATIONS
+     --------------------------------------------------------- */
+
+  const registrations =
+    memberships.flatMap(
+      (membership) =>
+        membership.team.registrations.map(
+          (registration) => ({
+            team: membership.team,
+            registration,
+          })
+        )
+    );
+
+  /* ---------------------------------------------------------
+     FIND ACTIVE REGISTRATION
+     --------------------------------------------------------- */
+
+  let active =
+    registrationId
+      ? registrations.find(
+          (item) =>
+            item.registration.id ===
+            registrationId
+        ) ?? null
+      : null;
+
+  /*
+   * If no explicit registration ID exists,
+   * automatically select a single editable Phase 1
+   * registration.
+   */
+  if (!active) {
+    const editable =
+      registrations.filter(
+        (item) =>
+          item.registration.phase ===
+            'PHASE_1' &&
+          (
+            item.registration.status ===
+              RegistrationStatus.DRAFT ||
+            item.registration.status ===
+              RegistrationStatus.CHANGES_REQUESTED
+          )
+      );
+
+    if (
+      editable.length === 1
+    ) {
+      active = editable[0];
+    }
+  }
+
+  /*
+   * If there is exactly one registration overall,
+   * use it.
+   */
+  if (
+    !active &&
+    !registrationId &&
+    registrations.length === 1
+  ) {
+    active = registrations[0];
+  }
+
+  /* ---------------------------------------------------------
+     TEAM SWITCHER DATA
+     --------------------------------------------------------- */
+
+  const teams = memberships
+    .map((membership) => {
+      const registration =
+        membership.team.registrations[0];
+
+      if (!registration) {
+        return null;
+      }
+
+      return {
+        registrationId:
+          registration.id,
+
+        teamId:
+          membership.team.id,
+
+        teamName:
+          membership.team.name,
+
+        status:
+          registration.status,
+
+        phase:
+          registration.phase,
+      };
+    })
+    .filter(
+      (
+        team
+      ): team is NonNullable<typeof team> =>
+        team !== null
+    );
+
+  /* ---------------------------------------------------------
+     USER NOTIFICATIONS
+     --------------------------------------------------------- */
+
+  const notifications =
+    await prisma.notification.findMany({
+      where: {
+        userId: user.id,
+      },
+
+      orderBy: {
+        createdAt: 'desc',
+      },
+
+      take: 20,
+    });
+
+  /* ---------------------------------------------------------
+     NO ACTIVE REGISTRATION
+     --------------------------------------------------------- */
+
+  if (!active) {
+    return {
+      teams,
+      notifications,
+      active: null,
+    };
+  }
+
+  /* =========================================================
+     FIXTURES
+     ========================================================= */
+
+  const rawFixtures =
+    await prisma.fixture.findMany({
+      where: {
+        tournamentId:
+          active.registration.tournamentId,
+
+        OR: [
+          {
+            teamAId:
+              active.team.id,
+          },
+
+          {
+            teamBId:
+              active.team.id,
+          },
+        ],
+
+        isPublished: true,
+      },
+
+      include: {
+        venue: true,
+      },
+
+      orderBy: [
+        {
+          kickoffAt: 'asc',
+        },
+
+        {
+          matchNumber: 'asc',
+        },
+      ],
+    });
+
+  /* =========================================================
+     FIND OPPONENT TEAMS
+     ========================================================= */
+
+  const opponentTeamIds =
+    rawFixtures
+      .map((fixture) => {
+        if (
+          fixture.teamAId ===
+          active!.team.id
+        ) {
+          return fixture.teamBId;
+        }
+
+        if (
+          fixture.teamBId ===
+          active!.team.id
+        ) {
+          return fixture.teamAId;
+        }
+
+        return null;
+      })
+      .filter(
+        (id): id is string =>
+          Boolean(id)
+      );
+
+  const opponentTeams =
+    opponentTeamIds.length > 0
+      ? await prisma.team.findMany({
+          where: {
+            id: {
+              in: opponentTeamIds,
+            },
+          },
+
+          select: {
+            id: true,
+            name: true,
+            shortName: true,
+            logoStorageKey: true,
+          },
+        })
+      : [];
+
+  const opponentMap =
+    new Map(
+      opponentTeams.map((team) => [
+        team.id,
+        team,
+      ])
+    );
+
+  /* =========================================================
+     DASHBOARD FIXTURE VIEW MODEL
+     ========================================================= */
+
+  const fixtures =
+    rawFixtures.map((fixture) => {
+      const opponentId =
+        fixture.teamAId ===
+        active!.team.id
+          ? fixture.teamBId
+          : fixture.teamAId;
+
+      return {
+        ...fixture,
+
+        opponent: opponentId
+          ? opponentMap.get(
+              opponentId
+            ) ?? null
+          : null,
+      };
+    });
+
+  /* =========================================================
+     ANNOUNCEMENTS
+     ========================================================= */
+
+  const announcements =
+    await prisma.announcement.findMany({
+      where: {
+        tournamentId:
+          active.registration.tournamentId,
+
+        status: 'PUBLISHED',
+      },
+
+      orderBy: [
+        {
+          publishedAt: 'desc',
+        },
+
+        {
+          createdAt: 'desc',
+        },
+      ],
+
+      take: 10,
+    });
+
+  /* =========================================================
+     RETURN
+     ========================================================= */
+
+  return {
+    teams,
+
+    notifications,
+
+    active: {
+      team:
+        active.team,
 
       registration:
-        membership.team.registrations[0] ??
-        null,
-    })
-  );
+        active.registration,
+
+      fixtures,
+
+      announcements,
+    },
+  };
 }
 
 /* =========================================================
-   CREATE NEW TEAM
+   CREATE NEW TEAM REGISTRATION
    ========================================================= */
 
 export async function createNewTeamRegistration() {
@@ -599,7 +911,8 @@ export async function createNewTeamRegistration() {
       data: {
         teamId: team.id,
         tournamentId: tournament.id,
-        status: RegistrationStatus.DRAFT,
+        status:
+          RegistrationStatus.DRAFT,
         phase: 'PHASE_1',
       },
 
@@ -637,11 +950,6 @@ export async function saveManagerInfo(
     );
   }
 
-  /*
-   * Explicit enum comparisons are used here instead
-   * of Array.includes() so TypeScript does not narrow
-   * the array to only two string literals.
-   */
   if (
     registration.status !==
       RegistrationStatus.DRAFT &&
@@ -662,33 +970,57 @@ export async function saveManagerInfo(
       data: {
         managerName:
           String(
-            formData.get('managerName') || ''
+            formData.get(
+              'managerName'
+            ) || ''
           ).trim() || null,
 
         managerPosition:
           String(
-            formData.get('managerPosition') || ''
+            formData.get(
+              'managerPosition'
+            ) || ''
           ).trim() || null,
 
         managerEmail:
           String(
-            formData.get('managerEmail') || ''
+            formData.get(
+              'managerEmail'
+            ) || ''
           ).trim() || null,
 
         managerPhone:
           String(
-            formData.get('managerPhone') || ''
+            formData.get(
+              'managerPhone'
+            ) || ''
           ).trim() || null,
 
         managerCountry:
           String(
-            formData.get('managerCountry') || ''
+            formData.get(
+              'managerCountry'
+            ) || ''
           ).trim() || null,
 
         assistantManagerName:
           String(
             formData.get(
               'assistantManagerName'
+            ) || ''
+          ).trim() || null,
+
+        assistantManagerEmail:
+          String(
+            formData.get(
+              'assistantManagerEmail'
+            ) || ''
+          ).trim() || null,
+
+        assistantManagerPhone:
+          String(
+            formData.get(
+              'assistantManagerPhone'
             ) || ''
           ).trim() || null,
       },
@@ -739,9 +1071,6 @@ export async function saveOfficialsInfo(
     );
   }
 
-  /*
-   * Explicit enum comparisons.
-   */
   if (
     registration.status !==
       RegistrationStatus.DRAFT &&
@@ -762,82 +1091,114 @@ export async function saveOfficialsInfo(
       data: {
         managerName:
           String(
-            formData.get('managerName') || ''
+            formData.get(
+              'managerName'
+            ) || ''
           ).trim() || null,
 
         managerEmail:
           String(
-            formData.get('managerEmail') || ''
+            formData.get(
+              'managerEmail'
+            ) || ''
           ).trim() || null,
 
         managerPhone:
           String(
-            formData.get('managerPhone') || ''
+            formData.get(
+              'managerPhone'
+            ) || ''
           ).trim() || null,
 
         managerIdNumber:
           String(
-            formData.get('managerIdNumber') || ''
+            formData.get(
+              'managerIdNumber'
+            ) || ''
           ).trim() || null,
 
         coachName:
           String(
-            formData.get('coachName') || ''
+            formData.get(
+              'coachName'
+            ) || ''
           ).trim() || null,
 
         coachEmail:
           String(
-            formData.get('coachEmail') || ''
+            formData.get(
+              'coachEmail'
+            ) || ''
           ).trim() || null,
 
         coachPhone:
           String(
-            formData.get('coachPhone') || ''
+            formData.get(
+              'coachPhone'
+            ) || ''
           ).trim() || null,
 
         coachIdNumber:
           String(
-            formData.get('coachIdNumber') || ''
+            formData.get(
+              'coachIdNumber'
+            ) || ''
           ).trim() || null,
 
         medicName:
           String(
-            formData.get('medicName') || ''
+            formData.get(
+              'medicName'
+            ) || ''
           ).trim() || null,
 
         medicEmail:
           String(
-            formData.get('medicEmail') || ''
+            formData.get(
+              'medicEmail'
+            ) || ''
           ).trim() || null,
 
         medicPhone:
           String(
-            formData.get('medicPhone') || ''
+            formData.get(
+              'medicPhone'
+            ) || ''
           ).trim() || null,
 
         medicIdNumber:
           String(
-            formData.get('medicIdNumber') || ''
+            formData.get(
+              'medicIdNumber'
+            ) || ''
           ).trim() || null,
 
         officialName:
           String(
-            formData.get('officialName') || ''
+            formData.get(
+              'officialName'
+            ) || ''
           ).trim() || null,
 
         officialEmail:
           String(
-            formData.get('officialEmail') || ''
+            formData.get(
+              'officialEmail'
+            ) || ''
           ).trim() || null,
 
         officialPhone:
           String(
-            formData.get('officialPhone') || ''
+            formData.get(
+              'officialPhone'
+            ) || ''
           ).trim() || null,
 
         officialIdNumber:
           String(
-            formData.get('officialIdNumber') || ''
+            formData.get(
+              'officialIdNumber'
+            ) || ''
           ).trim() || null,
       },
     });
@@ -865,7 +1226,7 @@ export async function saveOfficialsInfo(
 }
 
 /* =========================================================
-   PLAYERS
+   PLAYERS — GET
    ========================================================= */
 
 export async function getPlayers(
@@ -904,10 +1265,15 @@ export async function getPlayers(
 
   return {
     teamId: team.id,
-    registrationId: registration.id,
+    registrationId:
+      registration.id,
     players,
   };
 }
+
+/* =========================================================
+   PLAYERS — ADD
+   ========================================================= */
 
 export async function addPlayer(
   formData: FormData,
@@ -1061,6 +1427,10 @@ export async function addPlayer(
     teamId: team.id,
   };
 }
+
+/* =========================================================
+   PLAYERS — REMOVE
+   ========================================================= */
 
 export async function removePlayer(
   playerId: string,
@@ -1227,7 +1597,7 @@ export async function saveDocumentRecord(
      CREATE DOCUMENT
      ------------------------------------------------------- */
 
-  const doc =
+  const document =
     await prisma.playerDocument.create({
       data: {
         playerId:
@@ -1256,41 +1626,39 @@ export async function saveDocumentRecord(
     });
 
   /* -------------------------------------------------------
-     OFFICIAL STORAGE KEY
+     MAP OFFICIAL DOCUMENT TO REGISTRATION
      ------------------------------------------------------- */
 
   if (
     !data.playerId &&
     data.officialRole
   ) {
-    const officialFieldMap: Record<
-      string,
-      string
-    > = {
-      'manager:manager_id_doc':
-        'managerIdDocKey',
+    const officialFieldMap:
+      Record<string, string> = {
+        'manager:manager_id_doc':
+          'managerIdDocKey',
 
-      'manager:manager_photo':
-        'managerPhotoKey',
+        'manager:manager_photo':
+          'managerPhotoKey',
 
-      'coach:coach_id_doc':
-        'coachIdDocKey',
+        'coach:coach_id_doc':
+          'coachIdDocKey',
 
-      'coach:coach_photo':
-        'coachPhotoKey',
+        'coach:coach_photo':
+          'coachPhotoKey',
 
-      'medic:medic_id_doc':
-        'medicIdDocKey',
+        'medic:medic_id_doc':
+          'medicIdDocKey',
 
-      'medic:medic_photo':
-        'medicPhotoKey',
+        'medic:medic_photo':
+          'medicPhotoKey',
 
-      'official:official_id_doc':
-        'officialIdDocKey',
+        'official:official_id_doc':
+          'officialIdDocKey',
 
-      'official:official_photo':
-        'officialPhotoKey',
-    };
+        'official:official_photo':
+          'officialPhotoKey',
+      };
 
     const field =
       officialFieldMap[
@@ -1329,12 +1697,12 @@ export async function saveDocumentRecord(
 
   return {
     success: true,
-    document: doc,
+    document,
   };
 }
 
 /* =========================================================
-   REVIEW
+   REVIEW DATA
    ========================================================= */
 
 export async function getReviewData(
@@ -1355,6 +1723,8 @@ export async function getReviewData(
       },
 
       include: {
+        documents: true,
+
         players: {
           include: {
             documents: true,
@@ -1416,7 +1786,7 @@ export async function getReviewData(
         })
       : [];
 
-  const teamDocs = [
+  const allDocuments = [
     ...playerDocs,
     ...officialDocs,
   ];
@@ -1427,12 +1797,12 @@ export async function getReviewData(
     registration,
 
     totalDocCount:
-      teamDocs.length,
+      allDocuments.length,
   };
 }
 
 /* =========================================================
-   FINAL SUBMISSION
+   FINAL REGISTRATION SUBMISSION
    ========================================================= */
 
 export async function submitRegistration(
@@ -1471,7 +1841,7 @@ export async function submitRegistration(
   }
 
   /* -------------------------------------------------------
-     OFFICIAL VALIDATION
+     OFFICIALS
      ------------------------------------------------------- */
 
   const officialNames = [
@@ -1545,7 +1915,7 @@ export async function submitRegistration(
   }
 
   /* -------------------------------------------------------
-     STATUS TRANSITION
+     STATUS
      ------------------------------------------------------- */
 
   const newStatus =
@@ -1560,8 +1930,8 @@ export async function submitRegistration(
 
   const eventNote =
     isResubmission
-      ? 'Team resubmitted registration after making requested changes'
-      : 'Team submitted Team Details Submission for final review';
+      ? 'Team resubmitted registration after making requested changes.'
+      : 'Team submitted registration for final review.';
 
   /* -------------------------------------------------------
      UPDATE SAME REGISTRATION
@@ -1574,7 +1944,8 @@ export async function submitRegistration(
       },
 
       data: {
-        status: newStatus,
+        status:
+          newStatus,
 
         submittedAt:
           new Date(),
@@ -1626,7 +1997,7 @@ export async function submitRegistration(
 }
 
 /* =========================================================
-   PHASE 1 COMBINED SUBMIT
+   PHASE 1 — SAVE + SUBMIT
    ========================================================= */
 
 export async function saveAndSubmitPhase1(
@@ -1634,10 +2005,13 @@ export async function saveAndSubmitPhase1(
   registrationId?: string
 ) {
   /*
-   * Both operations receive the SAME registration ID.
+   * CRITICAL:
    *
-   * This is important for multiple-team users.
+   * The SAME registrationId is passed to both operations.
+   * This prevents a multiple-team user from saving one
+   * team and submitting another.
    */
+
   await saveTeamInfo(
     formData,
     registrationId
