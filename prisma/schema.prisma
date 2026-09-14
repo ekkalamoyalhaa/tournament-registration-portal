@@ -73,6 +73,11 @@ model Tournament {
   maxPlayers           Int?
   rules                String?
   eligibility          String?
+
+  // PAYMENT
+  registrationFeeAmount Decimal?
+  paymentDeadline       DateTime?
+
   contactInfo          String?
   createdAt            DateTime                @default(now())
   updatedAt            DateTime                @updatedAt
@@ -154,47 +159,77 @@ model TeamRegistration {
   teamId                String
   tournamentId          String
   status                RegistrationStatus  @default(DRAFT)
+
   managerName           String?
   managerPosition       String?
   managerEmail          String?
   managerPhone          String?
   managerCountry        String?
+
   assistantManagerName  String?
   assistantManagerEmail String?
   assistantManagerPhone String?
+
   submittedAt           DateTime?
   reviewedAt            DateTime?
   approvedAt            DateTime?
   internalNotes         String?
+
   createdAt             DateTime            @default(now())
   updatedAt             DateTime            @updatedAt
+
   coachEmail            String?
   coachIdDocKey         String?
   coachName             String?
   coachPhone            String?
   coachPhotoKey         String?
+
   division              Division?
+
   managerIdDocKey       String?
   managerPhotoKey       String?
+
   medicEmail            String?
   medicIdDocKey         String?
   medicName             String?
   medicPhone            String?
   medicPhotoKey         String?
+
   officialEmail         String?
   officialIdDocKey      String?
   officialName          String?
   officialPhone         String?
   officialPhotoKey      String?
+
   phase                 RegistrationPhase   @default(PHASE_1)
+
   slotApprovedAt        DateTime?
   slotApprovedBy        String?
   slotRejectionReason   String?
+
   coachIdNumber         String?
   managerIdNumber       String?
   medicIdNumber         String?
   officialIdNumber      String?
+
+  // =========================================================
+  // PAYMENT
+  // =========================================================
+
+  paymentStatus         PaymentStatus       @default(NOT_REQUIRED)
+  paymentAmount         Decimal?
+  paymentDeadline       DateTime?
+  paymentReceiptKey     String?
+  paymentReceiptName    String?
+  paymentReceiptMimeType String?
+  paymentReceiptSize    Int?
+  paymentSubmittedAt   DateTime?
+  paymentVerifiedAt    DateTime?
+  paymentVerifiedBy    String?
+  paymentRejectionReason String?
+
   events                RegistrationEvent[]
+
   team                  Team                @relation(fields: [teamId], references: [id], onDelete: Cascade)
   tournament            Tournament          @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
 
@@ -406,4 +441,12 @@ enum Division {
 enum RegistrationPhase {
   PHASE_1
   PHASE_2
+}
+
+enum PaymentStatus {
+  NOT_REQUIRED
+  PENDING
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
 }

@@ -1,4 +1,3 @@
-
 'use server';
 
 import { prisma } from '@/lib/db/prisma';
@@ -1934,6 +1933,42 @@ export async function submitRegistration(
       : 'Team submitted registration for final review.';
 
   /* -------------------------------------------------------
+     PAYMENT
+     
+     Payment becomes required only after Phase 2
+     submission.
+
+     If payment was already approved, preserve that
+     approval when the team resubmits after changes.
+
+     Otherwise initialize payment as PENDING.
+     ------------------------------------------------------- */
+
+  const paymentStatus =
+    registration.paymentStatus ===
+    'APPROVED'
+      ? 'APPROVED'
+      : 'PENDING';
+
+  const paymentAmount =
+    registration.paymentAmount ??
+    registration.tournament
+      .registrationFeeAmount ??
+    null;
+
+  const paymentDeadline =
+    registration.paymentDeadline ??
+    registration.tournament
+      .paymentDeadline ??
+    null;
+
+  const paymentRejectionReason =
+    registration.paymentStatus ===
+    'APPROVED'
+      ? null
+      : registration.paymentRejectionReason;
+
+  /* -------------------------------------------------------
      UPDATE SAME REGISTRATION
      ------------------------------------------------------- */
 
@@ -1952,8 +1987,23 @@ export async function submitRegistration(
 
         reviewedAt:
           null,
+
+        /*
+         * Payment workflow starts here.
+         */
+        paymentStatus,
+
+        paymentAmount,
+
+        paymentDeadline,
+
+        paymentRejectionReason,
       },
     });
+
+  /* -------------------------------------------------------
+     REGISTRATION EVENT
+     ------------------------------------------------------- */
 
   await prisma.registrationEvent.create({
     data: {
@@ -1970,12 +2020,20 @@ export async function submitRegistration(
     },
   });
 
+  /* -------------------------------------------------------
+     REFRESH TEAM PAGES
+     ------------------------------------------------------- */
+
   revalidatePath(
     '/team/dashboard'
   );
 
   revalidatePath(
     '/team/register'
+  );
+
+  revalidatePath(
+    '/team/register/manager'
   );
 
   revalidatePath(
@@ -2021,4 +2079,3 @@ export async function saveAndSubmitPhase1(
     registrationId
   );
 }
-
