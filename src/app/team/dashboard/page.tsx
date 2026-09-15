@@ -3,7 +3,6 @@ import { redirect } from 'next/navigation';
 import {
   AlertTriangle,
   ArrowRight,
-  CalendarDays,
   CheckCircle2,
   Clock3,
   FileCheck2,
@@ -19,6 +18,7 @@ import {
 
 import { SignOutButton } from '@/components/auth/SignOutButton';
 import { TeamSwitcher } from '@/components/team/TeamSwitcher';
+import PaymentCard from '@/components/team/PaymentCard';
 
 import {
   getTeamDashboardData,
@@ -80,6 +80,33 @@ function StatusBadge({
       className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 font-mono text-[10px] uppercase tracking-wider ${styles}`}
     >
       <span className="h-1.5 w-1.5 rounded-full bg-current" />
+      {statusLabel(status)}
+    </span>
+  );
+}
+
+function EventStatusBadge({
+  status,
+}: {
+  status: string;
+}) {
+  const styles =
+    status === 'APPROVED'
+      ? 'border-green-500/30 bg-green-500/10 text-green-400'
+      : status === 'REJECTED'
+        ? 'border-red-500/30 bg-red-500/10 text-red-400'
+        : status === 'CHANGES_REQUESTED'
+          ? 'border-tertiary/30 bg-tertiary/10 text-tertiary'
+          : status === 'SUBMITTED' ||
+              status === 'RESUBMITTED' ||
+              status === 'UNDER_REVIEW'
+            ? 'border-primary-container/30 bg-primary-container/10 text-primary-container'
+            : 'border-white/10 bg-white/[0.04] text-on-surface-variant';
+
+  return (
+    <span
+      className={`inline-flex items-center rounded-full border px-2.5 py-1 font-mono text-[9px] uppercase tracking-wider ${styles}`}
+    >
       {statusLabel(status)}
     </span>
   );
@@ -152,8 +179,6 @@ export default async function TeamDashboardPage({
   const {
     team,
     registration,
-    fixtures,
-    announcements,
   } = data.active;
 
   const players = team.players ?? [];
@@ -279,9 +304,16 @@ export default async function TeamDashboardPage({
     },
     {
       label: 'Payment',
-      complete: false,
-      active: false,
-      unavailable: true,
+      complete:
+        registration.paymentStatus ===
+        'APPROVED',
+      active:
+        registration.paymentStatus ===
+          'PENDING' ||
+        registration.paymentStatus ===
+          'UNDER_REVIEW' ||
+        registration.paymentStatus ===
+          'REJECTED',
     },
     {
       label: 'Final Approval',
@@ -340,7 +372,7 @@ export default async function TeamDashboardPage({
                   'Registration approved',
                 description:
                   'Your team is officially approved for the tournament.',
-                href: '#fixtures',
+                href: '#progress',
                 label: 'View tournament',
                 icon: Trophy,
               }
@@ -384,8 +416,8 @@ export default async function TeamDashboardPage({
 
             <p className="mt-2 max-w-2xl font-sans text-sm text-on-surface-variant">
               Manage your tournament submission,
-              team roster, officials and match
-              information from one place.
+              team roster, officials and payment
+              information from one place. To view details of your registrations choose below. 
             </p>
           </div>
 
@@ -521,9 +553,7 @@ export default async function TeamDashboardPage({
             <div className="flex flex-col gap-5 p-6 md:flex-row md:items-center md:justify-between">
               <div className="flex items-start gap-4">
                 <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary-container/10 text-primary-container">
-                  <NextActionIcon
-                    size={21}
-                  />
+                  <NextActionIcon size={21} />
                 </div>
 
                 <div>
@@ -576,11 +606,7 @@ export default async function TeamDashboardPage({
                         0{index + 1}
                       </span>
 
-                      {step.unavailable ? (
-                        <span className="rounded-full bg-white/5 px-2 py-1 font-mono text-[9px] uppercase text-outline">
-                          Not configured
-                        </span>
-                      ) : step.complete ? (
+                      {step.complete ? (
                         <CheckCircle2
                           size={16}
                           className="text-green-400"
@@ -600,18 +626,99 @@ export default async function TeamDashboardPage({
                     </p>
 
                     <p className="mt-1 font-mono text-[9px] uppercase tracking-wider text-outline">
-                      {step.unavailable
-                        ? 'Unavailable'
-                        : step.complete
-                          ? 'Complete'
-                          : step.active
-                            ? 'In progress'
-                            : 'Pending'}
+                      {step.complete
+                        ? 'Complete'
+                        : step.active
+                          ? 'In progress'
+                          : 'Pending'}
                     </p>
                   </div>
                 )
               )}
             </div>
+          </Card>
+        </section>
+
+
+                {/* Registration updates */}
+        <section className="mb-10">
+          <SectionHeader
+            icon={<FileText size={19} />}
+            title="Registration Updates"
+            description="History of changes and decisions for this registration."
+          />
+
+          <Card className="p-0">
+            {data.registrationUpdates.length ===
+            0 ? (
+              <div className="p-8 text-center">
+                <Clock3
+                  size={24}
+                  className="mx-auto mb-3 text-outline"
+                />
+
+                <p className="font-sans text-sm text-on-surface">
+                  No registration updates yet.
+                </p>
+
+                <p className="mt-1 font-sans text-xs text-outline">
+                  Updates will appear here as your
+                  registration moves through the
+                  review process.
+                </p>
+              </div>
+            ) : (
+              <div className="divide-y divide-white/5">
+                {data.registrationUpdates.map(
+                  (event) => (
+                    <div
+                      key={event.id}
+                      className="p-5"
+                    >
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            {event.fromStatus && (
+                              <>
+                                <EventStatusBadge
+                                  status={
+                                    event.fromStatus
+                                  }
+                                />
+
+                                <ArrowRight
+                                  size={13}
+                                  className="text-outline"
+                                />
+                              </>
+                            )}
+
+                            <EventStatusBadge
+                              status={
+                                event.toStatus
+                              }
+                            />
+                          </div>
+
+                          {event.note && (
+                            <p className="mt-3 font-sans text-sm leading-6 text-on-surface-variant">
+                              {event.note}
+                            </p>
+                          )}
+                        </div>
+
+                        <p className="shrink-0 font-mono text-[10px] text-outline sm:text-right">
+                          {formatDate(
+                            event.createdAt,
+                            true
+                          )}
+                        </p>
+                      </div>
+                    </div>
+                  )
+                )}
+              </div>
+            )}
           </Card>
         </section>
 
@@ -647,9 +754,11 @@ export default async function TeamDashboardPage({
                     size={24}
                     className="mx-auto mb-3 text-outline"
                   />
+
                   <p className="font-sans text-sm text-on-surface">
                     No players added yet.
                   </p>
+
                   <p className="mt-1 font-sans text-xs text-outline">
                     Players will appear here once
                     they are added to this team.
@@ -735,9 +844,7 @@ export default async function TeamDashboardPage({
                       className="flex items-center gap-4 px-5 py-4"
                     >
                       <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/[0.05] text-outline">
-                        <UserRoundCog
-                          size={16}
-                        />
+                        <UserRoundCog size={16} />
                       </div>
 
                       <div className="min-w-0 flex-1">
@@ -791,6 +898,7 @@ export default async function TeamDashboardPage({
                   <p className="font-mono text-[10px] uppercase tracking-wider text-outline">
                     Player documents
                   </p>
+
                   <p className="mt-2 font-sans text-2xl font-semibold text-on-surface">
                     {playerDocumentCount}
                   </p>
@@ -800,6 +908,7 @@ export default async function TeamDashboardPage({
                   <p className="font-mono text-[10px] uppercase tracking-wider text-outline">
                     Official documents
                   </p>
+
                   <p className="mt-2 font-sans text-2xl font-semibold text-on-surface">
                     {officialDocumentCount}
                   </p>
@@ -811,6 +920,7 @@ export default async function TeamDashboardPage({
                       <p className="font-mono text-[10px] uppercase tracking-wider text-outline">
                         Team documents
                       </p>
+
                       <p className="mt-1 font-sans text-sm text-on-surface">
                         {teamDocumentCount}{' '}
                         uploaded
@@ -840,29 +950,30 @@ export default async function TeamDashboardPage({
             <SectionHeader
               icon={<WalletCards size={19} />}
               title="Payment"
-              description="Payment tracking for this tournament."
+              description="Registration fee and payment receipt."
             />
 
-            <Card>
-              <div className="flex min-h-[180px] flex-col items-center justify-center text-center">
-                <WalletCards
-                  size={28}
-                  className="mb-3 text-outline"
-                />
-
-                <p className="font-sans text-sm font-medium text-on-surface">
-                  Payment tracking is not
-                  configured
-                </p>
-
-                <p className="mt-1 max-w-sm font-sans text-xs text-outline">
-                  Payment status, fees and receipts
-                  will appear here when payment
-                  tracking is enabled for this
-                  tournament.
-                </p>
-              </div>
-            </Card>
+            <PaymentCard
+              registrationId={
+                registration.id
+              }
+              paymentStatus={
+                registration.paymentStatus
+              }
+              paymentAmount={
+                registration.paymentAmount?.toString() ??
+                null
+              }
+              paymentDeadline={
+                registration.paymentDeadline
+              }
+              paymentReceiptName={
+                registration.paymentReceiptName
+              }
+              paymentRejectionReason={
+                registration.paymentRejectionReason
+              }
+            />
           </section>
         </div>
 
@@ -880,6 +991,7 @@ export default async function TeamDashboardPage({
                 <p className="font-mono text-[10px] uppercase tracking-wider text-outline">
                   Tournament
                 </p>
+
                 <p className="mt-2 font-sans text-sm font-medium text-on-surface">
                   {registration.tournament.name}
                 </p>
@@ -889,6 +1001,7 @@ export default async function TeamDashboardPage({
                 <p className="font-mono text-[10px] uppercase tracking-wider text-outline">
                   Registration closes
                 </p>
+
                 <p className="mt-2 font-sans text-sm font-medium text-on-surface">
                   {formatDate(
                     registration.tournament
@@ -901,6 +1014,7 @@ export default async function TeamDashboardPage({
                 <p className="font-mono text-[10px] uppercase tracking-wider text-outline">
                   Tournament dates
                 </p>
+
                 <p className="mt-2 font-sans text-sm font-medium text-on-surface">
                   {formatDate(
                     registration.tournament
@@ -918,8 +1032,10 @@ export default async function TeamDashboardPage({
                 <p className="font-mono text-[10px] uppercase tracking-wider text-outline">
                   Venue
                 </p>
+
                 <p className="mt-2 flex items-center gap-1.5 font-sans text-sm font-medium text-on-surface">
                   <MapPin size={14} />
+
                   {registration.tournament
                     .venue ?? 'To be announced'}
                 </p>
@@ -935,6 +1051,7 @@ export default async function TeamDashboardPage({
                     <p className="font-mono text-[10px] uppercase tracking-wider text-outline">
                       About
                     </p>
+
                     <p className="mt-2 whitespace-pre-line font-sans text-sm leading-6 text-on-surface-variant">
                       {
                         registration.tournament
@@ -950,6 +1067,7 @@ export default async function TeamDashboardPage({
                     <p className="font-mono text-[10px] uppercase tracking-wider text-outline">
                       Rules / Handbook
                     </p>
+
                     <p className="mt-2 whitespace-pre-line font-sans text-sm leading-6 text-on-surface-variant">
                       {
                         registration.tournament
@@ -963,209 +1081,8 @@ export default async function TeamDashboardPage({
           </Card>
         </section>
 
-        {/* Fixtures */}
-        <section
-          id="fixtures"
-          className="mb-10"
-        >
-          <SectionHeader
-            icon={<CalendarDays size={19} />}
-            title="Fixtures & Results"
-            description="Published fixtures for your active team."
-          />
 
-          <Card className="p-0">
-            {fixtures.length === 0 ? (
-              <div className="flex min-h-[190px] flex-col items-center justify-center p-8 text-center">
-                <CalendarDays
-                  size={28}
-                  className="mb-3 text-outline"
-                />
 
-                <p className="font-sans text-sm font-medium text-on-surface">
-                  Fixtures are not available yet
-                </p>
-
-                <p className="mt-1 max-w-md font-sans text-xs text-outline">
-                  Fixtures will appear here once
-                  the tournament draw and schedule
-                  have been published.
-                </p>
-              </div>
-            ) : (
-              <div className="divide-y divide-white/5">
-                {fixtures.map((fixture) => (
-                  <div
-                    key={fixture.id}
-                    className="flex flex-col gap-4 px-5 py-5 md:flex-row md:items-center md:justify-between"
-                  >
-                    <div>
-                      <div className="flex flex-wrap items-center gap-2">
-                        {fixture.group && (
-                          <span className="font-mono text-[10px] uppercase tracking-wider text-primary-container">
-                            Group {fixture.group}
-                          </span>
-                        )}
-
-                        {fixture.round && (
-                          <span className="font-mono text-[10px] uppercase tracking-wider text-outline">
-                            {fixture.round}
-                          </span>
-                        )}
-
-                        {fixture.matchNumber && (
-                          <span className="font-mono text-[10px] uppercase tracking-wider text-outline">
-                            Match #
-                            {fixture.matchNumber}
-                          </span>
-                        )}
-                      </div>
-
-                      <div className="mt-2 flex items-center gap-3">
-                        <span className="font-sans text-sm font-semibold text-on-surface">
-                          {team.name ===
-                          'Draft Team'
-                            ? 'Your team'
-                            : team.name}
-                        </span>
-
-                        <span className="font-mono text-xs text-outline">
-                          vs
-                        </span>
-
-                        <span className="font-sans text-sm font-semibold text-on-surface">
-                          {fixture.opponent
-                            ?.name ??
-                            'Opponent TBA'}
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-5">
-                      <div className="text-right">
-                        <p className="font-mono text-[10px] uppercase tracking-wider text-outline">
-                          Kickoff
-                        </p>
-
-                        <p className="mt-1 font-sans text-sm text-on-surface">
-                          {formatDate(
-                            fixture.kickoffAt,
-                            true
-                          )}
-                        </p>
-                      </div>
-
-                      <div className="rounded-lg border border-white/5 bg-black/20 px-4 py-2 font-mono text-xs text-on-surface-variant">
-                        {fixture.status.replace(
-                          /_/g,
-                          ' '
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </Card>
-        </section>
-
-        {/* Announcements / Notifications */}
-        <div className="mb-10 grid gap-6 lg:grid-cols-2">
-          <section>
-            <SectionHeader
-              icon={<FileText size={19} />}
-              title="Tournament Announcements"
-              description="Updates published for this tournament."
-            />
-
-            <Card className="p-0">
-              {announcements.length === 0 ? (
-                <div className="p-8 text-center">
-                  <p className="font-sans text-sm text-on-surface">
-                    No announcements yet.
-                  </p>
-                </div>
-              ) : (
-                <div className="divide-y divide-white/5">
-                  {announcements.map(
-                    (announcement) => (
-                      <div
-                        key={announcement.id}
-                        className="p-5"
-                      >
-                        <p className="font-sans text-sm font-semibold text-on-surface">
-                          {announcement.title}
-                        </p>
-
-                        <p className="mt-2 whitespace-pre-line font-sans text-sm leading-6 text-on-surface-variant">
-                          {announcement.body}
-                        </p>
-
-                        {announcement.publishedAt && (
-                          <p className="mt-3 font-mono text-[10px] uppercase tracking-wider text-outline">
-                            {formatDate(
-                              announcement.publishedAt
-                            )}
-                          </p>
-                        )}
-                      </div>
-                    )
-                  )}
-                </div>
-              )}
-            </Card>
-          </section>
-
-          <section>
-            <SectionHeader
-              icon={<Clock3 size={19} />}
-              title="Notifications"
-              description="Account notifications and registration updates."
-            />
-
-            <Card className="p-0">
-              {data.notifications.length ===
-              0 ? (
-                <div className="p-8 text-center">
-                  <p className="font-sans text-sm text-on-surface">
-                    No notifications.
-                  </p>
-                </div>
-              ) : (
-                <div className="divide-y divide-white/5">
-                  {data.notifications.map(
-                    (notification) => (
-                      <div
-                        key={notification.id}
-                        className="p-5"
-                      >
-                        <div className="flex items-start justify-between gap-4">
-                          <p className="font-sans text-sm font-medium text-on-surface">
-                            {notification.type.replace(
-                              /_/g,
-                              ' '
-                            )}
-                          </p>
-
-                          {!notification.readAt && (
-                            <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-primary-container shadow-[0_0_10px_rgba(0,240,255,0.5)]" />
-                          )}
-                        </div>
-
-                        <p className="mt-2 font-mono text-[10px] text-outline">
-                          {formatDate(
-                            notification.createdAt,
-                            true
-                          )}
-                        </p>
-                      </div>
-                    )
-                  )}
-                </div>
-              )}
-            </Card>
-          </section>
-        </div>
 
         {/* Contact */}
         <section

@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { StatCard } from '@/components/admin/StatCard';
 import { StatusBadge } from '@/components/ui/StatusBadge';
+import TournamentPaymentSettings from '@/components/admin/TournamentPaymentSettings';
 import {
   getAdminStats,
   getPendingTeamReviews,
@@ -23,14 +24,20 @@ function timeAgo(date: Date) {
     [4.345, 'week'],
     [12, 'month'],
   ];
+
   let value = seconds;
   let unit = 'second';
+
   for (const [amount, name] of units) {
     if (value < amount) break;
+
     value = Math.floor(value / amount);
     unit = name;
   }
-  return value <= 1 ? 'just now' : `${value} ${unit}${value === 1 ? '' : 's'} ago`;
+
+  return value <= 1
+    ? 'just now'
+    : `${value} ${unit}${value === 1 ? '' : 's'} ago`;
 }
 
 function ViewAllLink({ href }: { href: string }) {
@@ -59,6 +66,7 @@ export default async function AdminDashboardPage() {
         <h2 className="font-display text-display-lg font-bold tracking-tight text-primary-container">
           Tournament dashboard
         </h2>
+
         <p className="mt-2 font-sans text-body-md text-outline">
           Overview of all registrations and reviews for {stats.tournamentName}
         </p>
@@ -71,24 +79,53 @@ export default async function AdminDashboardPage() {
           total={stats.totalTeams}
           breakdown={[
             { label: 'Approved', value: stats.approved },
-            { label: 'Pending', value: stats.pendingTeams, highlight: true },
-            { label: 'Changes requested', value: stats.changesRequested },
+            {
+              label: 'Pending',
+              value: stats.pendingTeams,
+              highlight: true,
+            },
+            {
+              label: 'Changes requested',
+              value: stats.changesRequested,
+            },
           ]}
         />
+
         <StatCard
           label="Players"
           total={stats.totalPlayers}
           breakdown={[
-            { label: 'Approved', value: stats.approvedPlayers },
-            { label: 'Pending', value: stats.pendingPlayers, highlight: true },
-            { label: 'Changes requested', value: stats.playerChangesRequested },
+            {
+              label: 'Approved',
+              value: stats.approvedPlayers,
+            },
+            {
+              label: 'Pending',
+              value: stats.pendingPlayers,
+              highlight: true,
+            },
+            {
+              label: 'Changes requested',
+              value: stats.playerChangesRequested,
+            },
           ]}
         />
+
         <StatCard
           label="Documents"
           total={stats.totalDocs}
-          breakdown={[{ label: 'Uploaded', value: stats.totalDocs }]}
+          breakdown={[
+            {
+              label: 'Uploaded',
+              value: stats.totalDocs,
+            },
+          ]}
         />
+      </div>
+
+      {/* Tournament Payment Configuration */}
+      <div className="mb-8">
+        <TournamentPaymentSettings />
       </div>
 
       {/* Secondary Grid: Pending Reviews */}
@@ -99,23 +136,31 @@ export default async function AdminDashboardPage() {
             <h3 className="font-mono text-label-md uppercase tracking-wider text-outline">
               Pending team reviews
             </h3>
+
             <ViewAllLink href="/admin/teams" />
           </div>
+
           <div className="mt-2 flex-1 border-t border-primary-container/15">
             {pendingTeams.length === 0 ? (
               <div className="flex h-full items-center justify-center">
-                <p className="font-sans text-body-md italic text-outline/60">No teams pending review</p>
+                <p className="font-sans text-body-md italic text-outline/60">
+                  No teams pending review
+                </p>
               </div>
             ) : (
               <ul className="divide-y divide-white/5">
                 {pendingTeams.map((reg: PendingTeam) => (
-                  <li key={reg.id} className="flex items-center justify-between py-3">
+                  <li
+                    key={reg.id}
+                    className="flex items-center justify-between py-3"
+                  >
                     <Link
                       href={`/admin/teams/${reg.id}`}
                       className="font-sans text-body-md text-white hover:text-primary-container"
                     >
                       {reg.team.name}
                     </Link>
+
                     <StatusBadge status={reg.status} />
                   </li>
                 ))}
@@ -130,24 +175,35 @@ export default async function AdminDashboardPage() {
             <h3 className="font-mono text-label-md uppercase tracking-wider text-outline">
               Pending player reviews
             </h3>
+
             <ViewAllLink href="/admin/players" />
           </div>
+
           <div className="mt-2 flex-1 border-t border-primary-container/15">
             {pendingPlayers.length === 0 ? (
               <div className="flex h-full items-center justify-center">
-                <p className="font-sans text-body-md italic text-outline/60">No players pending review</p>
+                <p className="font-sans text-body-md italic text-outline/60">
+                  No players pending review
+                </p>
               </div>
             ) : (
               <ul className="divide-y divide-white/5">
                 {pendingPlayers.map((player: PendingPlayer) => (
-                  <li key={player.id} className="flex items-center justify-between py-3">
+                  <li
+                    key={player.id}
+                    className="flex items-center justify-between py-3"
+                  >
                     <Link
                       href={`/admin/players/${player.id}`}
                       className="font-sans text-body-md text-white hover:text-primary-container"
                     >
                       {player.firstName} {player.lastName}
-                      <span className="ml-2 font-mono text-label-sm text-outline">{player.team.name}</span>
+
+                      <span className="ml-2 font-mono text-label-sm text-outline">
+                        {player.team.name}
+                      </span>
                     </Link>
+
                     <StatusBadge status={player.status} />
                   </li>
                 ))}
@@ -160,24 +216,40 @@ export default async function AdminDashboardPage() {
       {/* Full Width Row: Recent Activity */}
       <div className="glass-panel flex min-h-[280px] flex-col rounded-xl p-6">
         <div className="mb-4 flex items-center justify-between">
-          <h3 className="font-mono text-label-md uppercase tracking-wider text-outline">Recent activity</h3>
+          <h3 className="font-mono text-label-md uppercase tracking-wider text-outline">
+            Recent activity
+          </h3>
         </div>
+
         <div className="group relative mt-2 flex-1 overflow-hidden border-t border-primary-container/15">
           {activity.length === 0 ? (
             <div className="flex h-full items-center justify-center">
               <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-transparent to-primary-container/5 opacity-0 transition-opacity duration-700 group-hover:opacity-100" />
-              <p className="z-10 font-sans text-body-md italic text-outline/60">No activity yet</p>
+
+              <p className="z-10 font-sans text-body-md italic text-outline/60">
+                No activity yet
+              </p>
             </div>
           ) : (
             <ul className="divide-y divide-white/5">
               {activity.map((event: ActivityEvent) => (
-                <li key={event.id} className="flex items-center justify-between py-3">
+                <li
+                  key={event.id}
+                  className="flex items-center justify-between py-3"
+                >
                   <p className="font-sans text-body-md text-white">
-                    <span className="font-medium">{event.teamName}</span>{' '}
+                    <span className="font-medium">
+                      {event.teamName}
+                    </span>{' '}
+
                     <span className="text-outline">
-                      {event.note ?? `moved to ${event.toStatus.replaceAll('_', ' ').toLowerCase()}`}
+                      {event.note ??
+                        `moved to ${event.toStatus
+                          .replaceAll('_', ' ')
+                          .toLowerCase()}`}
                     </span>
                   </p>
+
                   <span className="whitespace-nowrap font-mono text-label-sm text-outline">
                     {timeAgo(event.createdAt)}
                   </span>

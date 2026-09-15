@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -16,7 +15,15 @@ import {
   reviewTeamRegistration,
   reviewPlayer,
   deleteTeamRegistration,
+  getAdminDocumentUrl,
+  sendRegistrationToPayment,
 } from '@/lib/admin/actions';
+
+import {
+  approveRegistrationPayment,
+  rejectRegistrationPayment,
+  getPaymentReceiptUrl,
+} from '@/lib/payment/actions';
 
 type TeamDetail = Awaited<
   ReturnType<typeof getTeamDetail>
@@ -29,13 +36,16 @@ export default function AdminTeamReviewPage({
 }) {
   const router = useRouter();
 
-  const [data, setData] = useState<TeamDetail | null>(
-    null
-  );
+  const [data, setData] =
+    useState<TeamDetail | null>(null);
 
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] =
+    useState(true);
 
   const [actionLoading, setActionLoading] =
+    useState(false);
+
+  const [paymentActionLoading, setPaymentActionLoading] =
     useState(false);
 
   const [deleteLoading, setDeleteLoading] =
@@ -46,17 +56,18 @@ export default function AdminTeamReviewPage({
 
   const [note, setNote] = useState('');
 
+  const [paymentRejectReason, setPaymentRejectReason] =
+    useState('');
+
   const [actionError, setActionError] =
     useState('');
 
   const [actionSuccess, setActionSuccess] =
     useState('');
 
-  /*
-   * ---------------------------------------------------------
-   * LOAD REGISTRATION
-   * ---------------------------------------------------------
-   */
+  /* =========================================================
+     LOAD REGISTRATION
+  ========================================================= */
 
   useEffect(() => {
     let mounted = true;
@@ -66,9 +77,8 @@ export default function AdminTeamReviewPage({
         setLoading(true);
         setActionError('');
 
-        const result = await getTeamDetail(
-          params.id
-        );
+        const result =
+          await getTeamDetail(params.id);
 
         if (mounted) {
           setData(result);
@@ -100,28 +110,193 @@ export default function AdminTeamReviewPage({
     };
   }, [params.id]);
 
-  /*
-   * ---------------------------------------------------------
-   * REFRESH DATA
-   * ---------------------------------------------------------
-   */
+  /* =========================================================
+     REFRESH DATA
+  ========================================================= */
 
   async function refreshTeam() {
-    const refreshed = await getTeamDetail(
-      params.id
-    );
+    const refreshed =
+      await getTeamDetail(params.id);
 
     setData(refreshed);
 
     router.refresh();
   }
 
-  /*
-   * ---------------------------------------------------------
-   * SLOT APPROVAL
-   * PHASE 1
-   * ---------------------------------------------------------
-   */
+  /* =========================================================
+     VIEW DOCUMENT
+  ========================================================= */
+
+  async function handleDocumentView(
+    documentId: string
+  ) {
+    try {
+      setActionError('');
+      setActionSuccess('');
+
+      const result =
+        await getAdminDocumentUrl(
+          params.id,
+          documentId
+        );
+
+      window.open(
+        result.url,
+        '_blank',
+        'noopener,noreferrer'
+      );
+    } catch (error) {
+      console.error(
+        'Document view failed:',
+        error
+      );
+
+      setActionError(
+        error instanceof Error
+          ? error.message
+          : 'Unable to open document.'
+      );
+    }
+  }
+
+  /* =========================================================
+     VIEW PAYMENT RECEIPT
+  ========================================================= */
+
+  async function handlePaymentReceiptView() {
+    try {
+      setPaymentActionLoading(true);
+      setActionError('');
+      setActionSuccess('');
+
+      const url =
+        await getPaymentReceiptUrl(
+          params.id
+        );
+
+      if (!url) {
+        throw new Error(
+          'Payment receipt is not available.'
+        );
+      }
+
+      window.open(
+        url,
+        '_blank',
+        'noopener,noreferrer'
+      );
+    } catch (error) {
+      console.error(
+        'Payment receipt view failed:',
+        error
+      );
+
+      setActionError(
+        error instanceof Error
+          ? error.message
+          : 'Unable to open payment receipt.'
+      );
+    } finally {
+      setPaymentActionLoading(false);
+    }
+  }
+
+  /* =========================================================
+     APPROVE PAYMENT
+  ========================================================= */
+
+  async function handleApprovePayment() {
+    setPaymentActionLoading(true);
+    setActionError('');
+    setActionSuccess('');
+
+    try {
+      const result =
+        await approveRegistrationPayment(
+          params.id
+        );
+
+      if (!result?.success) {
+        throw new Error(
+          'The payment approval action failed.'
+        );
+      }
+
+      setActionSuccess(
+        'Payment approved successfully. The registration still requires final tournament administrator approval.'
+      );
+
+      setPaymentRejectReason('');
+
+      await refreshTeam();
+    } catch (error) {
+      console.error(
+        'Payment approval failed:',
+        error
+      );
+
+      setActionError(
+        error instanceof Error
+          ? error.message
+          : 'Unable to approve the payment.'
+      );
+    } finally {
+      setPaymentActionLoading(false);
+    }
+  }
+
+  /* =========================================================
+     REJECT PAYMENT
+  ========================================================= */
+
+  async function handleRejectPayment() {
+    setPaymentActionLoading(true);
+    setActionError('');
+    setActionSuccess('');
+
+    try {
+      const reason =
+        paymentRejectReason.trim() ||
+        'Payment receipt rejected by tournament administrator.';
+
+      const result =
+        await rejectRegistrationPayment(
+          params.id,
+          reason
+        );
+
+      if (!result?.success) {
+        throw new Error(
+          'The payment rejection action failed.'
+        );
+      }
+
+      setActionSuccess(
+        'Payment rejected successfully. The team can submit a new payment receipt.'
+      );
+
+      setPaymentRejectReason('');
+
+      await refreshTeam();
+    } catch (error) {
+      console.error(
+        'Payment rejection failed:',
+        error
+      );
+
+      setActionError(
+        error instanceof Error
+          ? error.message
+          : 'Unable to reject the payment.'
+      );
+    } finally {
+      setPaymentActionLoading(false);
+    }
+  }
+
+  /* =========================================================
+     SLOT APPROVAL — PHASE 1
+  ========================================================= */
 
   async function handleSlotApprove() {
     setActionLoading(true);
@@ -129,10 +304,11 @@ export default function AdminTeamReviewPage({
     setActionSuccess('');
 
     try {
-      const result = await approveSlot(
-        params.id,
-        note.trim() || undefined
-      );
+      const result =
+        await approveSlot(
+          params.id,
+          note.trim() || undefined
+        );
 
       if (!result?.success) {
         throw new Error(
@@ -163,12 +339,9 @@ export default function AdminTeamReviewPage({
     }
   }
 
-  /*
-   * ---------------------------------------------------------
-   * SLOT REJECTION
-   * PHASE 1
-   * ---------------------------------------------------------
-   */
+  /* =========================================================
+     SLOT REJECTION — PHASE 1
+  ========================================================= */
 
   async function handleSlotReject() {
     setActionLoading(true);
@@ -180,10 +353,11 @@ export default function AdminTeamReviewPage({
         note.trim() ||
         'Slot rejected by tournament administrator';
 
-      const result = await rejectSlot(
-        params.id,
-        reason
-      );
+      const result =
+        await rejectSlot(
+          params.id,
+          reason
+        );
 
       if (!result?.success) {
         throw new Error(
@@ -214,12 +388,54 @@ export default function AdminTeamReviewPage({
     }
   }
 
-  /*
-   * ---------------------------------------------------------
-   * FINAL TEAM REVIEW
-   * PHASE 2
-   * ---------------------------------------------------------
-   */
+  /* =========================================================
+     SEND TO PAYMENT — PHASE 2
+  ========================================================= */
+
+  async function handleSendToPayment() {
+    setActionLoading(true);
+    setActionError('');
+    setActionSuccess('');
+
+    try {
+      const result =
+        await sendRegistrationToPayment(
+          params.id,
+          note.trim() || undefined
+        );
+
+      if (!result?.success) {
+        throw new Error(
+          'The payment transition failed.'
+        );
+      }
+
+      setActionSuccess(
+        'Registration sent to payment successfully. The team can now submit their payment receipt.'
+      );
+
+      setNote('');
+
+      await refreshTeam();
+    } catch (error) {
+      console.error(
+        'Send to payment failed:',
+        error
+      );
+
+      setActionError(
+        error instanceof Error
+          ? error.message
+          : 'Unable to send the registration to payment.'
+      );
+    } finally {
+      setActionLoading(false);
+    }
+  }
+
+  /* =========================================================
+     FINAL TEAM REVIEW
+  ========================================================= */
 
   async function handleTeamAction(
     action:
@@ -273,11 +489,9 @@ export default function AdminTeamReviewPage({
     }
   }
 
-  /*
-   * ---------------------------------------------------------
-   * PLAYER REVIEW
-   * ---------------------------------------------------------
-   */
+  /* =========================================================
+     PLAYER REVIEW
+  ========================================================= */
 
   async function handlePlayerAction(
     playerId: string,
@@ -291,11 +505,12 @@ export default function AdminTeamReviewPage({
     setActionSuccess('');
 
     try {
-      const result = await reviewPlayer(
-        playerId,
-        action,
-        note.trim() || undefined
-      );
+      const result =
+        await reviewPlayer(
+          playerId,
+          action,
+          note.trim() || undefined
+        );
 
       if (!result?.success) {
         throw new Error(
@@ -331,11 +546,9 @@ export default function AdminTeamReviewPage({
     }
   }
 
-  /*
-   * ---------------------------------------------------------
-   * DELETE TEAM
-   * ---------------------------------------------------------
-   */
+  /* =========================================================
+     DELETE TEAM
+  ========================================================= */
 
   async function handleDeleteTeam() {
     setDeleteLoading(true);
@@ -374,11 +587,52 @@ export default function AdminTeamReviewPage({
     }
   }
 
-  /*
-   * ---------------------------------------------------------
-   * LOADING STATE
-   * ---------------------------------------------------------
-   */
+  /* =========================================================
+     DOCUMENT LABELS
+  ========================================================= */
+
+  function getDocumentLabel(
+    documentType: string
+  ) {
+    switch (documentType) {
+      case 'PLAYER_ID':
+        return 'ID Document';
+
+      case 'PASSPORT_PHOTO':
+        return 'Passport Photo';
+
+      case 'manager_id_doc':
+        return 'Manager — ID Document';
+
+      case 'manager_photo':
+        return 'Manager — Photo';
+
+      case 'coach_id_doc':
+        return 'Coach — ID Document';
+
+      case 'coach_photo':
+        return 'Coach — Photo';
+
+      case 'medic_id_doc':
+        return 'Medic — ID Document';
+
+      case 'medic_photo':
+        return 'Medic — Photo';
+
+      case 'official_id_doc':
+        return 'Official — ID Document';
+
+      case 'official_photo':
+        return 'Official — Photo';
+
+      default:
+        return documentType;
+    }
+  }
+
+  /* =========================================================
+     LOADING
+  ========================================================= */
 
   if (loading) {
     return (
@@ -396,11 +650,9 @@ export default function AdminTeamReviewPage({
     );
   }
 
-  /*
-   * ---------------------------------------------------------
-   * NOT FOUND
-   * ---------------------------------------------------------
-   */
+  /* =========================================================
+     NOT FOUND
+  ========================================================= */
 
   if (!data) {
     return (
@@ -432,11 +684,9 @@ export default function AdminTeamReviewPage({
     );
   }
 
-  /*
-   * ---------------------------------------------------------
-   * DERIVED STATE
-   * ---------------------------------------------------------
-   */
+  /* =========================================================
+     DERIVED STATE
+  ========================================================= */
 
   const isPhase1 =
     data.phase === 'PHASE_1';
@@ -466,19 +716,33 @@ export default function AdminTeamReviewPage({
     isPhase2 &&
     data.status === 'CHANGES_REQUESTED';
 
-  /*
-   * ---------------------------------------------------------
-   * PAGE
-   * ---------------------------------------------------------
-   */
+  const paymentApproved =
+    data.paymentStatus === 'APPROVED';
+
+  const paymentPending =
+    data.paymentStatus === 'PENDING';
+
+  const paymentUnderReview =
+    data.paymentStatus === 'UNDER_REVIEW';
+
+  const paymentRejected =
+    data.paymentStatus === 'REJECTED';
+
+  const canSendToPayment =
+    isReviewable &&
+    !paymentApproved &&
+    !paymentPending &&
+    !paymentUnderReview;
+
+  /* =========================================================
+     PAGE
+  ========================================================= */
 
   return (
     <div className="min-h-screen bg-transparent px-6 py-10">
       <div className="mx-auto max-w-7xl">
 
-        {/* -------------------------------------------------
-            HEADER
-        ------------------------------------------------- */}
+        {/* HEADER */}
 
         <div className="mb-8">
           <div className="mb-4">
@@ -523,12 +787,11 @@ export default function AdminTeamReviewPage({
                 onClick={() => {
                   setActionError('');
                   setActionSuccess('');
-                  setShowDeleteDialog(
-                    true
-                  );
+                  setShowDeleteDialog(true);
                 }}
                 disabled={
                   actionLoading ||
+                  paymentActionLoading ||
                   deleteLoading
                 }
                 className="border-error/30 bg-error/10 text-error hover:bg-error/20"
@@ -540,9 +803,7 @@ export default function AdminTeamReviewPage({
           </div>
         </div>
 
-        {/* -------------------------------------------------
-            GLOBAL FEEDBACK
-        ------------------------------------------------- */}
+        {/* FEEDBACK */}
 
         {actionError && (
           <div className="mb-6 rounded-lg border border-error/30 bg-error/10 px-4 py-3">
@@ -560,9 +821,7 @@ export default function AdminTeamReviewPage({
           </div>
         )}
 
-        {/* -------------------------------------------------
-            REGISTRATION STATUS
-        ------------------------------------------------- */}
+        {/* REGISTRATION STATUS */}
 
         <GlassCard className="mb-6">
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
@@ -624,9 +883,7 @@ export default function AdminTeamReviewPage({
           )}
         </GlassCard>
 
-        {/* -------------------------------------------------
-            TEAM INFORMATION
-        ------------------------------------------------- */}
+        {/* TEAM INFORMATION */}
 
         <GlassCard className="mb-6">
           <h2 className="font-sans text-headline-sm font-bold text-white">
@@ -661,8 +918,7 @@ export default function AdminTeamReviewPage({
               </p>
 
               <p className="mt-1 font-sans text-body-md text-white">
-                {data.team.institutionType ||
-                  '—'}
+                {data.team.institutionType || '—'}
               </p>
             </div>
 
@@ -672,9 +928,7 @@ export default function AdminTeamReviewPage({
               </p>
 
               <p className="mt-1 font-sans text-body-md text-white">
-                {data.team
-                  .clubRegistrationNumber ||
-                  '—'}
+                {data.team.clubRegistrationNumber || '—'}
               </p>
             </div>
 
@@ -714,8 +968,7 @@ export default function AdminTeamReviewPage({
               </p>
 
               <p className="mt-1 break-all font-sans text-body-md text-white">
-                {data.team.contactEmail ||
-                  '—'}
+                {data.team.contactEmail || '—'}
               </p>
             </div>
 
@@ -725,8 +978,7 @@ export default function AdminTeamReviewPage({
               </p>
 
               <p className="mt-1 font-sans text-body-md text-white">
-                {data.team.contactPhone ||
-                  '—'}
+                {data.team.contactPhone || '—'}
               </p>
             </div>
 
@@ -757,9 +1009,7 @@ export default function AdminTeamReviewPage({
           )}
         </GlassCard>
 
-        {/* -------------------------------------------------
-            TOURNAMENT
-        ------------------------------------------------- */}
+        {/* TOURNAMENT */}
 
         <GlassCard className="mb-6">
           <h2 className="font-sans text-headline-sm font-bold text-white">
@@ -791,9 +1041,7 @@ export default function AdminTeamReviewPage({
           </div>
         </GlassCard>
 
-        {/* -------------------------------------------------
-            PHASE 1 SLOT REVIEW
-        ------------------------------------------------- */}
+        {/* PHASE 1 SLOT REVIEW */}
 
         {isPhase1 &&
           data.status === 'SUBMITTED' && (
@@ -849,9 +1097,7 @@ export default function AdminTeamReviewPage({
             </GlassCard>
           )}
 
-        {/* -------------------------------------------------
-            PHASE 1 PROCESSED
-        ------------------------------------------------- */}
+        {/* PHASE 1 PROCESSED */}
 
         {isPhase1 &&
           data.status !== 'SUBMITTED' && (
@@ -873,9 +1119,7 @@ export default function AdminTeamReviewPage({
             </GlassCard>
           )}
 
-        {/* -------------------------------------------------
-            MANAGER INFORMATION
-        ------------------------------------------------- */}
+        {/* MANAGER */}
 
         {isPhase2 && (
           <GlassCard className="mb-6">
@@ -902,8 +1146,7 @@ export default function AdminTeamReviewPage({
                 </p>
 
                 <p className="mt-1 font-sans text-body-md text-white">
-                  {data.managerPosition ||
-                    '—'}
+                  {data.managerPosition || '—'}
                 </p>
               </div>
 
@@ -933,18 +1176,128 @@ export default function AdminTeamReviewPage({
                 </p>
 
                 <p className="mt-1 font-sans text-body-md text-white">
-                  {data.managerCountry ||
-                    '—'}
+                  {data.managerCountry || '—'}
+                </p>
+              </div>
+
+              <div>
+                <p className="font-sans text-body-sm text-white/40">
+                  ID number
+                </p>
+
+                <p className="mt-1 font-sans text-body-md text-white">
+                  {data.managerIdNumber || '—'}
                 </p>
               </div>
 
             </div>
+
+            {/* MANAGER DOCUMENTS */}
+
+            <div className="mt-6 border-t border-white/10 pt-5">
+
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+
+                <div>
+                  <h3 className="font-sans text-body-lg font-semibold text-white">
+                    Manager documents
+                  </h3>
+
+                  <p className="mt-1 font-sans text-body-sm text-white/40">
+                    Identification documents uploaded by the team manager.
+                  </p>
+                </div>
+
+                {data.managerDocuments &&
+                  data.managerDocuments.length > 0 && (
+                    <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 font-sans text-xs text-white/50">
+                      {data.managerDocuments.length}{' '}
+                      document
+                      {data.managerDocuments.length === 1
+                        ? ''
+                        : 's'}
+                    </span>
+                  )}
+
+              </div>
+
+              {data.managerDocuments &&
+              data.managerDocuments.length > 0 ? (
+                <div className="mt-5 grid gap-3 md:grid-cols-2">
+
+                  {data.managerDocuments.map(
+                    (document) => (
+                      <div
+                        key={document.id}
+                        className="flex flex-col gap-4 rounded-xl border border-white/10 bg-white/5 p-4 sm:flex-row sm:items-center sm:justify-between"
+                      >
+
+                        <div className="min-w-0">
+
+                          <p className="font-sans text-body-md font-medium text-white">
+                            {getDocumentLabel(
+                              document.documentType
+                            )}
+                          </p>
+
+                          <p className="mt-1 truncate font-sans text-body-sm text-white/40">
+                            {document.originalFilename}
+                          </p>
+
+                          <div className="mt-2 flex flex-wrap gap-2">
+
+                            <span className="rounded-full border border-white/10 bg-black/10 px-2.5 py-1 font-sans text-xs text-white/40">
+                              {document.mimeType}
+                            </span>
+
+                            {document.size && (
+                              <span className="rounded-full border border-white/10 bg-black/10 px-2.5 py-1 font-sans text-xs text-white/40">
+                                {Math.round(
+                                  document.size / 1024
+                                )}{' '}
+                                KB
+                              </span>
+                            )}
+
+                          </div>
+
+                        </div>
+
+                        <GlassButton
+                          type="button"
+                          onClick={() =>
+                            handleDocumentView(
+                              document.id
+                            )
+                          }
+                          disabled={
+                            actionLoading ||
+                            paymentActionLoading
+                          }
+                          className="shrink-0 border-primary/30 bg-primary/10 text-primary hover:bg-primary/20"
+                        >
+                          View
+                        </GlassButton>
+
+                      </div>
+                    )
+                  )}
+
+                </div>
+              ) : (
+                <div className="mt-5 rounded-lg border border-white/10 bg-black/10 px-4 py-4">
+                  <p className="font-sans text-body-sm text-white/40">
+                    No manager documents uploaded.
+                  </p>
+                </div>
+              )}
+
+            </div>
+
           </GlassCard>
         )}
 
-        {/* -------------------------------------------------
-            OFFICIALS
-        ------------------------------------------------- */}
+        {/* OFFICIALS */}
 
         {isPhase2 && (
           <GlassCard className="mb-6">
@@ -955,10 +1308,7 @@ export default function AdminTeamReviewPage({
 
             <div className="mt-6 grid gap-6 md:grid-cols-2">
 
-              {/* COACH */}
-
               <div className="rounded-lg border border-white/10 bg-white/5 p-5">
-
                 <h3 className="font-sans text-body-lg font-semibold text-white">
                   Coach
                 </h3>
@@ -998,10 +1348,7 @@ export default function AdminTeamReviewPage({
                 </div>
               </div>
 
-              {/* MEDIC */}
-
               <div className="rounded-lg border border-white/10 bg-white/5 p-5">
-
                 <h3 className="font-sans text-body-lg font-semibold text-white">
                   Medic
                 </h3>
@@ -1041,10 +1388,7 @@ export default function AdminTeamReviewPage({
                 </div>
               </div>
 
-              {/* OFFICIAL */}
-
               <div className="rounded-lg border border-white/10 bg-white/5 p-5">
-
                 <h3 className="font-sans text-body-lg font-semibold text-white">
                   Official
                 </h3>
@@ -1057,8 +1401,7 @@ export default function AdminTeamReviewPage({
                     </p>
 
                     <p className="font-sans text-body-md text-white">
-                      {data.officialName ||
-                        '—'}
+                      {data.officialName || '—'}
                     </p>
                   </div>
 
@@ -1068,8 +1411,7 @@ export default function AdminTeamReviewPage({
                     </p>
 
                     <p className="break-all font-sans text-body-md text-white">
-                      {data.officialEmail ||
-                        '—'}
+                      {data.officialEmail || '—'}
                     </p>
                   </div>
 
@@ -1079,8 +1421,7 @@ export default function AdminTeamReviewPage({
                     </p>
 
                     <p className="font-sans text-body-md text-white">
-                      {data.officialPhone ||
-                        '—'}
+                      {data.officialPhone || '—'}
                     </p>
                   </div>
 
@@ -1091,9 +1432,7 @@ export default function AdminTeamReviewPage({
           </GlassCard>
         )}
 
-        {/* -------------------------------------------------
-            PLAYERS
-        ------------------------------------------------- */}
+        {/* PLAYERS */}
 
         {isPhase2 && (
           <GlassCard className="mb-6">
@@ -1108,8 +1447,7 @@ export default function AdminTeamReviewPage({
                 <p className="mt-1 font-sans text-body-sm text-white/40">
                   {data.team.players.length}{' '}
                   player
-                  {data.team.players.length ===
-                  1
+                  {data.team.players.length === 1
                     ? ''
                     : 's'} registered
                 </p>
@@ -1117,204 +1455,303 @@ export default function AdminTeamReviewPage({
 
             </div>
 
-            {data.team.players.length ===
-            0 ? (
+            {data.team.players.length === 0 ? (
               <div className="mt-6 rounded-lg border border-white/10 bg-white/5 p-6 text-center">
                 <p className="font-sans text-body-md text-white/50">
-                  No players have been added
-                  yet.
+                  No players have been added yet.
                 </p>
               </div>
             ) : (
-              <div className="mt-6 overflow-x-auto">
+              <div className="mt-6 space-y-4">
 
-                <table className="w-full min-w-[800px]">
+                {data.team.players.map(
+                  (player) => (
+                    <div
+                      key={player.id}
+                      className="rounded-xl border border-white/10 bg-white/5 p-4"
+                    >
+                      <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
 
-                  <thead>
-                    <tr className="border-b border-white/10 text-left">
+                        <div className="grid flex-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
 
-                      <th className="px-4 py-3 font-sans text-body-sm font-medium text-white/40">
-                        Player
-                      </th>
-
-                      <th className="px-4 py-3 font-sans text-body-sm font-medium text-white/40">
-                        Number
-                      </th>
-
-                      <th className="px-4 py-3 font-sans text-body-sm font-medium text-white/40">
-                        Position
-                      </th>
-
-                      <th className="px-4 py-3 font-sans text-body-sm font-medium text-white/40">
-                        Status
-                      </th>
-
-                      <th className="px-4 py-3 text-right font-sans text-body-sm font-medium text-white/40">
-                        Actions
-                      </th>
-
-                    </tr>
-                  </thead>
-
-                  <tbody>
-
-                    {data.team.players.map(
-                      (player) => (
-                        <tr
-                          key={player.id}
-                          className="border-b border-white/5"
-                        >
-
-                          <td className="px-4 py-4">
-                            <p className="font-sans text-body-md font-medium text-white">
-                              {
-                                player.firstName
-                              }{' '}
-                              {
-                                player.lastName
-                              }
+                          <div>
+                            <p className="font-sans text-body-sm text-white/40">
+                              Player
                             </p>
-                          </td>
 
-                          <td className="px-4 py-4 font-sans text-body-md text-white/70">
-                            {player.jerseyNumber ??
-                              '—'}
-                          </td>
+                            <p className="mt-1 font-sans text-body-md font-medium text-white">
+                              {player.firstName}{' '}
+                              {player.lastName}
+                            </p>
+                          </div>
 
-                          <td className="px-4 py-4 font-sans text-body-md text-white/70">
-                            {player.position ||
-                              '—'}
-                          </td>
+                          <div>
+                            <p className="font-sans text-body-sm text-white/40">
+                              Jersey number
+                            </p>
 
-                          <td className="px-4 py-4">
-                            <StatusBadge
-                              status={
-                                player.status
-                              }
-                            />
-                          </td>
+                            <p className="mt-1 font-sans text-body-md text-white/70">
+                              {player.jerseyNumber ?? '—'}
+                            </p>
+                          </div>
 
-                          <td className="px-4 py-4">
+                          <div>
+                            <p className="font-sans text-body-sm text-white/40">
+                              Position
+                            </p>
 
-                            <div className="flex justify-end gap-2">
+                            <p className="mt-1 font-sans text-body-md text-white/70">
+                              {player.position || '—'}
+                            </p>
+                          </div>
 
-                              {player.status !==
-                                'APPROVED' &&
-                                player.status !==
-                                  'REJECTED' && (
-                                  <>
-                                    <GlassButton
-                                      type="button"
-                                      onClick={() =>
-                                        handlePlayerAction(
-                                          player.id,
-                                          'approve'
-                                        )
-                                      }
-                                      disabled={
-                                        actionLoading
-                                      }
-                                      className="border-green-500/30 bg-green-500/10 text-green-400 hover:bg-green-500/20"
-                                    >
-                                      Approve
-                                    </GlassButton>
+                          <div>
+                            <p className="font-sans text-body-sm text-white/40">
+                              Status
+                            </p>
 
-                                    <GlassButton
-                                      type="button"
-                                      onClick={() =>
-                                        handlePlayerAction(
-                                          player.id,
-                                          'request_changes'
-                                        )
-                                      }
-                                      disabled={
-                                        actionLoading
-                                      }
-                                      className="border-tertiary/30 bg-tertiary/10 text-tertiary hover:bg-tertiary/20"
-                                    >
-                                      Changes
-                                    </GlassButton>
-
-                                    <GlassButton
-                                      type="button"
-                                      onClick={() =>
-                                        handlePlayerAction(
-                                          player.id,
-                                          'reject'
-                                        )
-                                      }
-                                      disabled={
-                                        actionLoading
-                                      }
-                                      className="border-error/30 bg-error/10 text-error hover:bg-error/20"
-                                    >
-                                      Reject
-                                    </GlassButton>
-                                  </>
-                                )}
-
+                            <div className="mt-1">
+                              <StatusBadge
+                                status={player.status}
+                              />
                             </div>
-                          </td>
+                          </div>
 
-                        </tr>
-                      )
-                    )}
+                        </div>
 
-                  </tbody>
+                        <div className="flex flex-wrap gap-2 xl:justify-end">
 
-                </table>
+                          {player.status !== 'APPROVED' &&
+                            player.status !== 'REJECTED' && (
+                              <>
+                                <GlassButton
+                                  type="button"
+                                  onClick={() =>
+                                    handlePlayerAction(
+                                      player.id,
+                                      'approve'
+                                    )
+                                  }
+                                  disabled={
+                                    actionLoading
+                                  }
+                                  className="border-green-500/30 bg-green-500/10 text-green-400 hover:bg-green-500/20"
+                                >
+                                  Approve
+                                </GlassButton>
+
+                                <GlassButton
+                                  type="button"
+                                  onClick={() =>
+                                    handlePlayerAction(
+                                      player.id,
+                                      'request_changes'
+                                    )
+                                  }
+                                  disabled={
+                                    actionLoading
+                                  }
+                                  className="border-tertiary/30 bg-tertiary/10 text-tertiary hover:bg-tertiary/20"
+                                >
+                                  Changes
+                                </GlassButton>
+
+                                <GlassButton
+                                  type="button"
+                                  onClick={() =>
+                                    handlePlayerAction(
+                                      player.id,
+                                      'reject'
+                                    )
+                                  }
+                                  disabled={
+                                    actionLoading
+                                  }
+                                  className="border-error/30 bg-error/10 text-error hover:bg-error/20"
+                                >
+                                  Reject
+                                </GlassButton>
+                              </>
+                            )}
+
+                        </div>
+                      </div>
+
+                      {/* PLAYER DOCUMENTS */}
+
+                      <div className="mt-5 border-t border-white/10 pt-4">
+
+                        <div className="mb-3 flex items-center justify-between gap-3">
+
+                          <div>
+                            <p className="font-sans text-body-sm font-medium text-white">
+                              Player documents
+                            </p>
+
+                            <p className="mt-0.5 font-sans text-xs text-white/40">
+                              {player.documents.length}{' '}
+                              document
+                              {player.documents.length === 1
+                                ? ''
+                                : 's'} uploaded
+                            </p>
+                          </div>
+
+                        </div>
+
+                        {player.documents.length === 0 ? (
+                          <div className="rounded-lg border border-white/10 bg-black/10 px-4 py-3">
+                            <p className="font-sans text-body-sm text-white/30">
+                              No player documents uploaded.
+                            </p>
+                          </div>
+                        ) : (
+                          <div className="grid gap-3 md:grid-cols-2">
+
+                            {player.documents.map(
+                              (document) => (
+                                <div
+                                  key={document.id}
+                                  className="flex flex-col gap-3 rounded-lg border border-white/10 bg-black/10 p-3 sm:flex-row sm:items-center sm:justify-between"
+                                >
+
+                                  <div className="min-w-0">
+
+                                    <p className="font-sans text-body-sm font-medium text-white">
+                                      {getDocumentLabel(
+                                        document.documentType
+                                      )}
+                                    </p>
+
+                                    <p className="mt-1 truncate font-sans text-xs text-white/40">
+                                      {document.originalFilename}
+                                    </p>
+
+                                    <p className="mt-1 font-sans text-xs text-white/25">
+                                      {document.mimeType}
+                                    </p>
+
+                                  </div>
+
+                                  <GlassButton
+                                    type="button"
+                                    onClick={() =>
+                                      handleDocumentView(
+                                        document.id
+                                      )
+                                    }
+                                    disabled={
+                                      actionLoading ||
+                                      paymentActionLoading
+                                    }
+                                    className="shrink-0 border-primary/30 bg-primary/10 text-primary hover:bg-primary/20"
+                                  >
+                                    View
+                                  </GlassButton>
+
+                                </div>
+                              )
+                            )}
+
+                          </div>
+                        )}
+
+                      </div>
+
+                    </div>
+                  )
+                )}
+
               </div>
             )}
 
           </GlassCard>
         )}
 
-        {/* -------------------------------------------------
-            DOCUMENTS
-        ------------------------------------------------- */}
+        {/* OFFICIAL DOCUMENTS */}
 
         {isPhase2 && (
           <GlassCard className="mb-6">
 
-            <h2 className="font-sans text-headline-sm font-bold text-white">
-              Documents
-            </h2>
+            <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+
+              <div>
+                <h2 className="font-sans text-headline-sm font-bold text-white">
+                  Official documents
+                </h2>
+
+                <p className="mt-1 font-sans text-body-sm text-white/40">
+                  Coach, medic and official identification documents.
+                </p>
+              </div>
+
+              {data.officialDocuments &&
+                data.officialDocuments.length > 0 && (
+                  <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 font-sans text-xs text-white/50">
+                    {data.officialDocuments.length}{' '}
+                    document
+                    {data.officialDocuments.length === 1
+                      ? ''
+                      : 's'}
+                  </span>
+                )}
+
+            </div>
 
             {data.officialDocuments &&
-            data.officialDocuments.length >
-              0 ? (
+            data.officialDocuments.length > 0 ? (
               <div className="mt-6 space-y-3">
 
                 {data.officialDocuments.map(
                   (document) => (
                     <div
                       key={document.id}
-                      className="flex flex-col gap-3 rounded-lg border border-white/10 bg-white/5 p-4 md:flex-row md:items-center md:justify-between"
+                      className="flex flex-col gap-4 rounded-xl border border-white/10 bg-white/5 p-4 md:flex-row md:items-center md:justify-between"
                     >
 
-                      <div>
+                      <div className="min-w-0">
 
                         <p className="font-sans text-body-md font-medium text-white">
-                          {
+                          {getDocumentLabel(
                             document.documentType
-                          }
+                          )}
                         </p>
 
-                        <p className="mt-1 font-sans text-body-sm text-white/40">
-                          {
-                            document.originalFilename
-                          }
+                        <p className="mt-1 truncate font-sans text-body-sm text-white/40">
+                          {document.originalFilename}
                         </p>
 
-                        <p className="mt-1 font-sans text-body-sm text-white/30">
-                          {document.mimeType}
-                        </p>
+                        <div className="mt-2 flex flex-wrap gap-2">
+
+                          <span className="rounded-full border border-white/10 bg-black/10 px-2.5 py-1 font-sans text-xs text-white/40">
+                            {document.mimeType}
+                          </span>
+
+                          {document.officialRole && (
+                            <span className="rounded-full border border-primary/20 bg-primary/5 px-2.5 py-1 font-sans text-xs text-primary/70">
+                              {document.officialRole}
+                            </span>
+                          )}
+
+                        </div>
 
                       </div>
 
-                      <span className="font-sans text-body-sm text-white/40">
-                        Document uploaded
-                      </span>
+                      <GlassButton
+                        type="button"
+                        onClick={() =>
+                          handleDocumentView(
+                            document.id
+                          )
+                        }
+                        disabled={
+                          actionLoading ||
+                          paymentActionLoading
+                        }
+                        className="shrink-0 border-primary/30 bg-primary/10 text-primary hover:bg-primary/20"
+                      >
+                        View
+                      </GlassButton>
 
                     </div>
                   )
@@ -1324,8 +1761,7 @@ export default function AdminTeamReviewPage({
             ) : (
               <div className="mt-6 rounded-lg border border-white/10 bg-white/5 p-6 text-center">
                 <p className="font-sans text-body-md text-white/50">
-                  No official documents
-                  found.
+                  No official documents found.
                 </p>
               </div>
             )}
@@ -1333,9 +1769,311 @@ export default function AdminTeamReviewPage({
           </GlassCard>
         )}
 
-        {/* -------------------------------------------------
+        {/* =====================================================
+            PAYMENT STATUS
+        ===================================================== */}
+
+        {isPhase2 && (
+          <GlassCard className="mb-6">
+
+            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+
+              <div>
+                <h2 className="font-sans text-headline-sm font-bold text-white">
+                  Payment
+                </h2>
+
+                <p className="mt-1 font-sans text-body-sm text-white/40">
+                  Registration payment status.
+                </p>
+              </div>
+
+              <span
+                className={`rounded-full border px-3 py-1 font-sans text-body-sm ${
+                  paymentApproved
+                    ? 'border-green-500/30 bg-green-500/10 text-green-400'
+                    : paymentUnderReview
+                      ? 'border-yellow-500/30 bg-yellow-500/10 text-yellow-400'
+                      : paymentRejected
+                        ? 'border-error/30 bg-error/10 text-error'
+                        : paymentPending
+                          ? 'border-primary/30 bg-primary/10 text-primary'
+                          : 'border-white/10 bg-white/5 text-white/50'
+                }`}
+              >
+                {data.paymentStatus
+                  ? data.paymentStatus.replace(
+                      /_/g,
+                      ' '
+                    )
+                  : 'NOT REQUIRED'}
+              </span>
+
+            </div>
+
+            <div className="mt-6 grid gap-5 md:grid-cols-3">
+
+              <div>
+                <p className="font-sans text-body-sm text-white/40">
+                  Registration fee
+                </p>
+
+                <p className="mt-1 font-sans text-body-lg font-semibold text-white">
+                  {data.paymentAmount
+                    ? `MVR ${data.paymentAmount.toString()}`
+                    : data.tournament.registrationFeeAmount
+                      ? `MVR ${data.tournament.registrationFeeAmount.toString()}`
+                      : 'Not configured'}
+                </p>
+              </div>
+
+              <div>
+                <p className="font-sans text-body-sm text-white/40">
+                  Payment deadline
+                </p>
+
+                <p className="mt-1 font-sans text-body-md text-white">
+                  {data.paymentDeadline
+                    ? new Date(
+                        data.paymentDeadline
+                      ).toLocaleDateString()
+                    : data.tournament.paymentDeadline
+                      ? new Date(
+                          data.tournament.paymentDeadline
+                        ).toLocaleDateString()
+                      : 'Not configured'}
+                </p>
+              </div>
+
+              <div>
+                <p className="font-sans text-body-sm text-white/40">
+                  Receipt
+                </p>
+
+                <div className="mt-1 flex flex-wrap items-center gap-2">
+
+                  <p className="font-sans text-body-md text-white">
+                    {data.paymentReceiptKey
+                      ? 'Uploaded'
+                      : 'Not uploaded'}
+                  </p>
+
+                  {data.paymentReceiptKey && (
+                    <GlassButton
+                      type="button"
+                      onClick={
+                        handlePaymentReceiptView
+                      }
+                      disabled={
+                        paymentActionLoading
+                      }
+                      className="border-primary/30 bg-primary/10 text-primary hover:bg-primary/20"
+                    >
+                      {paymentActionLoading
+                        ? 'Opening...'
+                        : 'View receipt'}
+                    </GlassButton>
+                  )}
+
+                </div>
+              </div>
+
+            </div>
+
+            {data.paymentReceiptName && (
+              <div className="mt-5 rounded-lg border border-white/10 bg-white/5 px-4 py-3">
+
+                <p className="font-sans text-body-sm text-white/40">
+                  Receipt file
+                </p>
+
+                <p className="mt-1 break-all font-sans text-body-md text-white">
+                  {data.paymentReceiptName}
+                </p>
+
+                {data.paymentReceiptMimeType && (
+                  <p className="mt-1 font-sans text-xs text-white/30">
+                    {data.paymentReceiptMimeType}
+                    {data.paymentReceiptSize
+                      ? ` • ${Math.round(
+                          data.paymentReceiptSize /
+                            1024
+                        )} KB`
+                      : ''}
+                  </p>
+                )}
+
+              </div>
+            )}
+
+            {data.paymentSubmittedAt && (
+              <div className="mt-5">
+
+                <p className="font-sans text-body-sm text-white/40">
+                  Receipt submitted
+                </p>
+
+                <p className="mt-1 font-sans text-body-md text-white">
+                  {new Date(
+                    data.paymentSubmittedAt
+                  ).toLocaleString()}
+                </p>
+
+              </div>
+            )}
+
+            {data.paymentVerifiedAt && (
+              <div className="mt-4">
+
+                <p className="font-sans text-body-sm text-white/40">
+                  Payment verified
+                </p>
+
+                <p className="mt-1 font-sans text-body-md text-white">
+                  {new Date(
+                    data.paymentVerifiedAt
+                  ).toLocaleString()}
+                </p>
+
+              </div>
+            )}
+
+            {paymentRejected &&
+              data.paymentRejectionReason && (
+                <div className="mt-5 rounded-lg border border-error/20 bg-error/10 p-4">
+
+                  <p className="font-sans text-body-sm text-error">
+                    Payment rejection reason
+                  </p>
+
+                  <p className="mt-1 whitespace-pre-wrap font-sans text-body-md text-white/80">
+                    {data.paymentRejectionReason}
+                  </p>
+
+                </div>
+              )}
+
+            {/* PAYMENT VERIFICATION CONTROLS */}
+
+            {paymentUnderReview && (
+              <div className="mt-6 rounded-xl border border-yellow-500/20 bg-yellow-500/5 p-5">
+
+                <div>
+                  <p className="font-sans text-body-md font-medium text-yellow-400">
+                    Payment verification required
+                  </p>
+
+                  <p className="mt-1 font-sans text-body-sm text-white/60">
+                    The team has submitted its payment
+                    receipt. Review the receipt before
+                    approving or rejecting the payment.
+                  </p>
+                </div>
+
+                <textarea
+                  value={paymentRejectReason}
+                  onChange={(event) =>
+                    setPaymentRejectReason(
+                      event.target.value
+                    )
+                  }
+                  placeholder="Add a rejection reason if the payment is invalid or cannot be verified..."
+                  rows={4}
+                  className="mt-5 w-full rounded-lg border border-white/10 bg-white/5 px-4 py-3 font-sans text-body-md text-white outline-none placeholder:text-white/30 focus:border-white/30"
+                />
+
+                <div className="mt-4 flex flex-wrap gap-3">
+
+                  <GlassButton
+                    type="button"
+                    onClick={
+                      handleApprovePayment
+                    }
+                    disabled={
+                      paymentActionLoading
+                    }
+                    className="border-green-500/30 bg-green-500/10 text-green-400 hover:bg-green-500/20"
+                  >
+                    {paymentActionLoading
+                      ? 'Processing...'
+                      : 'Approve Payment'}
+                  </GlassButton>
+
+                  <GlassButton
+                    type="button"
+                    onClick={
+                      handleRejectPayment
+                    }
+                    disabled={
+                      paymentActionLoading
+                    }
+                    className="border-error/30 bg-error/10 text-error hover:bg-error/20"
+                  >
+                    {paymentActionLoading
+                      ? 'Processing...'
+                      : 'Reject Payment'}
+                  </GlassButton>
+
+                </div>
+
+              </div>
+            )}
+
+            {paymentPending && (
+              <div className="mt-5 rounded-lg border border-primary/20 bg-primary/5 p-4">
+
+                <p className="font-sans text-body-md font-medium text-primary">
+                  Awaiting payment receipt
+                </p>
+
+                <p className="mt-1 font-sans text-body-sm text-white/60">
+                  The payment request has been sent to
+                  the team. The team must upload its
+                  payment receipt before payment can be
+                  verified.
+                </p>
+
+              </div>
+            )}
+
+            {paymentRejected && (
+              <div className="mt-5 rounded-lg border border-error/20 bg-error/5 p-4">
+
+                <p className="font-sans text-body-md font-medium text-error">
+                  Payment rejected
+                </p>
+
+                <p className="mt-1 font-sans text-body-sm text-white/60">
+                  The team can submit a new payment
+                  receipt after correcting the payment
+                  issue.
+                </p>
+
+              </div>
+            )}
+
+            {paymentApproved && (
+              <div className="mt-5 rounded-lg border border-green-500/20 bg-green-500/10 p-4">
+
+                <p className="font-sans text-body-md font-medium text-green-400">
+                  Payment approved
+                </p>
+
+                <p className="mt-1 font-sans text-body-sm text-white/60">
+                  Payment has been verified. The
+                  registration still requires final
+                  tournament administrator approval.
+                </p>
+
+              </div>
+            )}
+
+          </GlassCard>
+        )}
+
+        {/* =====================================================
             FINAL REVIEW
-        ------------------------------------------------- */}
+        ===================================================== */}
 
         {isPhase2 && (
           <GlassCard className="mb-10">
@@ -1346,8 +2084,8 @@ export default function AdminTeamReviewPage({
 
             <p className="mt-2 font-sans text-body-md text-white/50">
               Review the completed Phase 2
-              registration before making the
-              final decision.
+              registration before moving it to
+              payment or making the final decision.
             </p>
 
             {/* WAITING FOR TEAM */}
@@ -1435,16 +2173,39 @@ export default function AdminTeamReviewPage({
               </div>
             )}
 
-            {/* REVIEW ACTIONS */}
+            {/* PAYMENT TRANSITION */}
 
-            {isReviewable && (
+            {canSendToPayment && (
               <>
+
+                <div className="mt-6 rounded-lg border border-primary/20 bg-primary/5 px-5 py-4">
+
+                  <p className="font-sans text-body-md font-medium text-primary">
+                    Registration ready for payment
+                  </p>
+
+                  <p className="mt-1 font-sans text-body-sm text-white/60">
+                    Once you send this registration to
+                    payment, the team will be able to
+                    submit its registration fee receipt.
+                  </p>
+
+                  {paymentRejected && (
+                    <p className="mt-3 font-sans text-body-sm text-error/80">
+                      The previous payment was rejected.
+                      Sending to payment again will allow
+                      the team to submit a new receipt.
+                    </p>
+                  )}
+
+                </div>
+
                 <textarea
                   value={note}
                   onChange={(event) =>
                     setNote(event.target.value)
                   }
-                  placeholder="Add a note (optional)…"
+                  placeholder="Add a payment instruction or note (optional)…"
                   rows={4}
                   className="mt-6 w-full rounded-lg border border-white/10 bg-white/5 px-4 py-3 font-sans text-body-md text-white outline-none placeholder:text-white/30 focus:border-white/30"
                 />
@@ -1453,17 +2214,19 @@ export default function AdminTeamReviewPage({
 
                   <GlassButton
                     type="button"
-                    onClick={() =>
-                      handleTeamAction(
-                        'approve'
-                      )
+                    onClick={
+                      handleSendToPayment
                     }
-                    disabled={actionLoading}
-                    className="border-green-500/30 bg-green-500/10 text-green-400 hover:bg-green-500/20"
+                    disabled={
+                      actionLoading
+                    }
+                    className="border-primary/30 bg-primary/10 text-primary hover:bg-primary/20"
                   >
                     {actionLoading
                       ? 'Processing...'
-                      : 'Approve'}
+                      : paymentRejected
+                        ? 'Send to Payment Again'
+                        : 'Send to Payment'}
                   </GlassButton>
 
                   <GlassButton
@@ -1497,8 +2260,91 @@ export default function AdminTeamReviewPage({
                   </GlassButton>
 
                 </div>
+
               </>
             )}
+
+            {/* PAYMENT ALREADY APPROVED → FINAL APPROVAL */}
+
+            {isReviewable &&
+              paymentApproved && (
+                <>
+
+                  <div className="mt-6 rounded-lg border border-green-500/30 bg-green-500/10 px-5 py-4">
+
+                    <p className="font-sans text-body-md font-medium text-green-400">
+                      Payment approved
+                    </p>
+
+                    <p className="mt-1 font-sans text-body-sm text-white/60">
+                      Payment has been verified.
+                      This registration is now ready
+                      for final approval.
+                    </p>
+
+                  </div>
+
+                  <textarea
+                    value={note}
+                    onChange={(event) =>
+                      setNote(event.target.value)
+                    }
+                    placeholder="Add a final approval note (optional)…"
+                    rows={4}
+                    className="mt-6 w-full rounded-lg border border-white/10 bg-white/5 px-4 py-3 font-sans text-body-md text-white outline-none placeholder:text-white/30 focus:border-white/30"
+                  />
+
+                  <div className="mt-4 flex flex-wrap gap-3">
+
+                    <GlassButton
+                      type="button"
+                      onClick={() =>
+                        handleTeamAction(
+                          'approve'
+                        )
+                      }
+                      disabled={actionLoading}
+                      className="border-green-500/30 bg-green-500/10 text-green-400 hover:bg-green-500/20"
+                    >
+                      {actionLoading
+                        ? 'Processing...'
+                        : 'Approve Registration'}
+                    </GlassButton>
+
+                    <GlassButton
+                      type="button"
+                      onClick={() =>
+                        handleTeamAction(
+                          'request_changes'
+                        )
+                      }
+                      disabled={actionLoading}
+                      className="border-tertiary/30 bg-tertiary/10 text-tertiary hover:bg-tertiary/20"
+                    >
+                      {actionLoading
+                        ? 'Processing...'
+                        : 'Request changes'}
+                    </GlassButton>
+
+                    <GlassButton
+                      type="button"
+                      onClick={() =>
+                        handleTeamAction(
+                          'reject'
+                        )
+                      }
+                      disabled={actionLoading}
+                      className="border-error/30 bg-error/10 text-error hover:bg-error/20"
+                    >
+                      {actionLoading
+                        ? 'Processing...'
+                        : 'Reject'}
+                    </GlassButton>
+
+                  </div>
+
+                </>
+              )}
 
           </GlassCard>
         )}
@@ -1506,7 +2352,7 @@ export default function AdminTeamReviewPage({
       </div>
 
       {/* =====================================================
-          DELETE CONFIRMATION DIALOG
+          DELETE CONFIRMATION
       ===================================================== */}
 
       {showDeleteDialog && (

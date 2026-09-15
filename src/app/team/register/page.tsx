@@ -30,7 +30,11 @@ export default async function TeamRegistrationPage({
    * screens. Do not allow this Phase 1 page to render for them.
    */
   if (registration.phase !== 'PHASE_1') {
-    redirect('/team/dashboard');
+    redirect(
+      `/team/dashboard?registrationId=${encodeURIComponent(
+        registration.id
+      )}`
+    );
   }
 
   /*
@@ -153,7 +157,9 @@ export default async function TeamRegistrationPage({
 
           <div className="mt-6 text-center">
             <Link
-              href="/team/dashboard"
+              href={`/team/dashboard?registrationId=${encodeURIComponent(
+                registration.id
+              )}`}
               className="font-sans text-body-md text-gold hover:text-primary"
             >
               ← Back to dashboard
@@ -164,6 +170,12 @@ export default async function TeamRegistrationPage({
     );
   }
 
+  /*
+   * Phase 1 submission.
+   *
+   * The exact registration ID is always passed through.
+   * This is important because one user can manage multiple teams.
+   */
   async function handleSubmit(formData: FormData) {
     'use server';
 
@@ -172,6 +184,11 @@ export default async function TeamRegistrationPage({
       registration.id
     );
 
+    /*
+     * Server-side validation failed.
+     * Return to the exact registration rather than relying
+     * on the dashboard to determine which team is active.
+     */
     if (result.error) {
       redirect(
         `/team/register?registrationId=${encodeURIComponent(
@@ -180,7 +197,18 @@ export default async function TeamRegistrationPage({
       );
     }
 
-    redirect('/team/dashboard');
+    /*
+     * Submission succeeded.
+     *
+     * IMPORTANT:
+     * Preserve the exact registrationId when going to the
+     * dashboard so the correct team is displayed.
+     */
+    redirect(
+      `/team/dashboard?registrationId=${encodeURIComponent(
+        registration.id
+      )}`
+    );
   }
 
   return (
@@ -388,7 +416,9 @@ export default async function TeamRegistrationPage({
         {/* Back to dashboard */}
         <div className="mt-6 text-center">
           <Link
-            href="/team/dashboard"
+            href={`/team/dashboard?registrationId=${encodeURIComponent(
+              registration.id
+            )}`}
             className="font-sans text-body-md text-gold hover:text-primary"
           >
             ← Back to dashboard

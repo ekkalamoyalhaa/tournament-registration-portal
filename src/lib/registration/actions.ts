@@ -7,12 +7,9 @@ import { redirect } from 'next/navigation';
 import {
   InstitutionType,
   Division,
-  RegistrationStatus,
 } from '@prisma/client';
 
-/* =========================================================
-   AUTH / HELPERS
-   ========================================================= */
+/* ---------- helpers ---------- */
 
 async function getUser() {
   const session = await auth();
@@ -35,145 +32,106 @@ async function getUser() {
 }
 
 async function getOpenTournament() {
-  const tournament =
-    await prisma.tournament.findFirst({
-      where: {
+  let t = await prisma.tournament.findFirst({
+    where: {
+      status: 'OPEN_FOR_REGISTRATION',
+    },
+    orderBy: {
+      createdAt: 'desc',
+    },
+  });
+
+  if (!t) {
+    t = await prisma.tournament.create({
+      data: {
+        slug: '2026-gaafu-championship',
+        name: 'IUMSU Beach Handball Fiesta 2026',
         status: 'OPEN_FOR_REGISTRATION',
-      },
-
-      orderBy: {
-        createdAt: 'desc',
-      },
-    });
-
-  if (!tournament) {
-    throw new Error(
-      'No tournament is currently open for registration.'
-    );
-  }
-
-  return tournament;
-}
-
-/* =========================================================
-   REGISTRATION ACCESS
-   ========================================================= */
-
-async function getRegistrationById(
-  registrationId: string
-) {
-  const user = await getUser();
-
-  const registration =
-    await prisma.teamRegistration.findFirst({
-      where: {
-        id: registrationId,
-
-        team: {
-          members: {
-            some: {
-              userId: user.id,
-            },
-          },
-        },
-      },
-
-      include: {
-        tournament: true,
-
-        team: {
-          include: {
-            documents: true,
-
-            players: {
-              include: {
-                documents: true,
-              },
-
-              orderBy: {
-                createdAt: 'desc',
-              },
-            },
-          },
-        },
+        startDate: new Date('2026-12-12'),
+        endDate: new Date('2026-12-20'),
+        registrationClosesAt: new Date('2026-11-30'),
+        availableTeamSlots: 42,
+        minPlayers: 8,
+        maxPlayers: 10,
       },
     });
-
-  if (!registration) {
-    throw new Error(
-      'Registration not found or you do not have access to it.'
-    );
   }
 
-  return {
-    team: registration.team,
-    registration,
-  };
+  return t;
 }
 
-/* =========================================================
-   GET / CREATE REGISTRATION
-   ========================================================= */
+/* ---------- registration resolver ---------- */
 
 export async function getOrCreateDraftRegistration(
   registrationId?: string
 ) {
-  /*
-   * If an explicit registrationId was provided,
-   * ALWAYS use that exact registration.
-   */
-  if (registrationId) {
-    return getRegistrationById(
-      registrationId
-    );
-  }
-
   const user = await getUser();
 
-  const memberships =
-    await prisma.teamMembership.findMany({
-      where: {
-        userId: user.id,
+  /*
+   * ---------------------------------------------------------
+   * EXACT REGISTRATION
+   * ---------------------------------------------------------
+   *
+   * A user may belong to multiple teams.
+   *
+   * When registrationId is provided, always use that exact
+   * registration and verify access through TeamMembership.
+   */
+  if (registrationId) {
+    const registration =
+      await prisma.teamRegistration.findUnique({
+        where: {
+          id: registrationId,
+        },
+        include: {
+          tournament: true,
+          team: true,
+        },
+      });
 
-        team: {
-          registrations: {
-            some: {
-              phase: 'PHASE_1',
+    if (!registration) {
+      throw new Error(
+        'Registration not found'
+      );
+    }
 
-              OR: [
-                {
-                  status:
-                    RegistrationStatus.DRAFT,
-                },
-                {
-                  status:
-                    RegistrationStatus.CHANGES_REQUESTED,
-                },
-              ],
-            },
+    const membership =
+      await prisma.teamMembership.findUnique({
+        where: {
+          userId_teamId: {
+            userId: user.id,
+            teamId: registration.teamId,
           },
         },
+      });
+
+    if (!membership) {
+      throw new Error(
+        'You do not have access to this registration'
+      );
+    }
+
+    return {
+      team: registration.team,
+      registration,
+    };
+  }
+
+  /*
+   * ---------------------------------------------------------
+   * LEGACY / DEFAULT REGISTRATION
+   * ---------------------------------------------------------
+   */
+  const membership =
+    await prisma.teamMembership.findFirst({
+      where: {
+        userId: user.id,
       },
 
       include: {
         team: {
           include: {
             registrations: {
-              where: {
-                phase: 'PHASE_1',
-
-                OR: [
-                  {
-                    status:
-                      RegistrationStatus.DRAFT,
-                  },
-                  {
-                    status:
-                      RegistrationStatus.CHANGES_REQUESTED,
-                  },
-                ],
-              },
-
               include: {
                 tournament: true,
               },
@@ -193,42 +151,23 @@ export async function getOrCreateDraftRegistration(
       },
     });
 
-  const draftRegistrations =
-    memberships
-      .map((membership) => {
-        const registration =
-          membership.team.registrations[0];
+  if (membership?.team) {
+    const reg =
+      membership.team.registrations[0];
 
-        if (!registration) {
-          return null;
-        }
-
-        return {
-          team: membership.team,
-          registration,
-        };
-      })
-      .filter(
-        (
-          value
-        ): value is NonNullable<typeof value> =>
-          value !== null
-      );
-
-  if (
-    draftRegistrations.length === 1
-  ) {
-    return draftRegistrations[0];
+    if (reg) {
+      return {
+        team: membership.team,
+        registration: reg,
+      };
+    }
   }
 
-  if (
-    draftRegistrations.length > 1
-  ) {
-    throw new Error(
-      'Multiple team registrations found. Please select a team from the dashboard.'
-    );
-  }
-
+  /*
+   * ---------------------------------------------------------
+   * CREATE NEW TEAM / REGISTRATION
+   * ---------------------------------------------------------
+   */
   const tournament =
     await getOpenTournament();
 
@@ -253,7 +192,7 @@ export async function getOrCreateDraftRegistration(
       data: {
         teamId: team.id,
         tournamentId: tournament.id,
-        status: RegistrationStatus.DRAFT,
+        status: 'DRAFT',
         phase: 'PHASE_1',
       },
 
@@ -268,53 +207,28 @@ export async function getOrCreateDraftRegistration(
   };
 }
 
-/* =========================================================
-   START NEW TEAM
-   ========================================================= */
-
 export async function startNewTeamRegistration() {
-  const { registration } =
-    await createNewTeamRegistration();
+  'use server';
 
-  redirect(
-    `/team/register?registrationId=${encodeURIComponent(
-      registration.id
-    )}`
-  );
+  await createNewTeamRegistration();
+
+  redirect('/team/register');
 }
 
-/* =========================================================
-   PHASE 1 — TEAM INFORMATION
-   ========================================================= */
+/* ---------- phase 1: team info ---------- */
 
 export async function saveTeamInfo(
   formData: FormData,
   registrationId?: string
 ) {
-  const {
-    team,
-    registration,
-  } =
+  const { team, registration } =
     await getOrCreateDraftRegistration(
       registrationId
     );
 
-  if (
-    registration.phase !== 'PHASE_1'
-  ) {
+  if (registration.phase !== 'PHASE_1') {
     throw new Error(
-      'Team information can only be edited in Phase 1.'
-    );
-  }
-
-  if (
-    registration.status !==
-      RegistrationStatus.DRAFT &&
-    registration.status !==
-      RegistrationStatus.CHANGES_REQUESTED
-  ) {
-    throw new Error(
-      'This registration cannot be edited in its current status.'
+      'Team info can only be edited in Phase 1'
     );
   }
 
@@ -325,10 +239,8 @@ export async function saveTeamInfo(
     formData.get('division');
 
   const institutionType =
-    institutionTypeValue ===
-      'UNIVERSITY' ||
-    institutionTypeValue ===
-      'COLLEGE' ||
+    institutionTypeValue === 'UNIVERSITY' ||
+    institutionTypeValue === 'COLLEGE' ||
     institutionTypeValue ===
       'HIGHER_EDUCATION_INSTITUTE'
       ? institutionTypeValue
@@ -340,7 +252,7 @@ export async function saveTeamInfo(
       ? divisionValue
       : null;
 
-  const updatedTeam =
+  const updated =
     await prisma.team.update({
       where: {
         id: team.id,
@@ -348,39 +260,31 @@ export async function saveTeamInfo(
 
       data: {
         name:
-          String(
-            formData.get('name') || ''
-          ).trim(),
+          (formData.get('name') as string) ||
+          '',
 
         shortName:
-          String(
-            formData.get('shortName') || ''
-          ).trim() || null,
+          (formData.get('shortName') as string) ||
+          null,
 
         institutionType:
-          institutionType as
-            | InstitutionType
-            | null,
+          institutionType as InstitutionType | null,
 
         country:
-          String(
-            formData.get('country') || ''
-          ).trim() || null,
+          (formData.get('country') as string) ||
+          null,
 
         city:
-          String(
-            formData.get('city') || ''
-          ).trim() || null,
+          (formData.get('city') as string) ||
+          null,
 
         contactEmail:
-          String(
-            formData.get('contactEmail') || ''
-          ).trim() || null,
+          (formData.get('contactEmail') as string) ||
+          null,
 
         contactPhone:
-          String(
-            formData.get('contactPhone') || ''
-          ).trim() || null,
+          (formData.get('contactPhone') as string) ||
+          null,
       },
     });
 
@@ -395,92 +299,46 @@ export async function saveTeamInfo(
     },
   });
 
-  revalidatePath(
-    '/team/register'
-  );
-
-  revalidatePath(
-    '/team/dashboard'
-  );
+  revalidatePath('/team/register');
 
   return {
     success: true,
-    team: updatedTeam,
+    team: updated,
   };
 }
-
-/* =========================================================
-   PHASE 1 — SUBMIT
-   ========================================================= */
 
 export async function submitPhase1(
   registrationId?: string
 ) {
-  const {
-    team,
-    registration,
-  } =
+  const { registration } =
     await getOrCreateDraftRegistration(
       registrationId
     );
 
-  if (
-    registration.phase !== 'PHASE_1'
-  ) {
+  if (registration.phase !== 'PHASE_1') {
     return {
-      error: 'Not in Phase 1.',
+      error: 'Not in Phase 1',
     };
   }
 
-  if (
-    registration.status !==
-      RegistrationStatus.DRAFT &&
-    registration.status !==
-      RegistrationStatus.CHANGES_REQUESTED
-  ) {
-    return {
-      error:
-        'This registration cannot be submitted in its current status.',
-    };
-  }
+  const team =
+    await prisma.team.findUnique({
+      where: {
+        id: registration.teamId,
+      },
+    });
 
   if (
-    !team.name ||
-    team.name === 'Draft Team'
+    !team?.name ||
+    team.name === 'Draft Team' ||
+    !team.institutionType ||
+    !registration.division
   ) {
     return {
       error:
-        'Team name is required.',
+        'Complete all required fields before submitting.',
     };
   }
-
-  if (!team.institutionType) {
-    return {
-      error:
-        'Institution type is required.',
-    };
-  }
-
-  if (!registration.division) {
-    return {
-      error:
-        'Division is required.',
-    };
-  }
-
-  const isResubmission =
-    registration.status ===
-    RegistrationStatus.CHANGES_REQUESTED;
-
-  const newStatus =
-    isResubmission
-      ? RegistrationStatus.RESUBMITTED
-      : RegistrationStatus.SUBMITTED;
-
-  const fromStatus =
-    isResubmission
-      ? RegistrationStatus.CHANGES_REQUESTED
-      : RegistrationStatus.DRAFT;
 
   const updated =
     await prisma.teamRegistration.update({
@@ -489,9 +347,8 @@ export async function submitPhase1(
       },
 
       data: {
-        status: newStatus,
+        status: 'SUBMITTED',
         submittedAt: new Date(),
-        reviewedAt: null,
       },
     });
 
@@ -500,24 +357,17 @@ export async function submitPhase1(
       teamRegistrationId:
         registration.id,
 
-      fromStatus,
+      fromStatus: 'DRAFT',
 
-      toStatus:
-        newStatus,
+      toStatus: 'SUBMITTED',
 
-      note: isResubmission
-        ? 'Team resubmitted Phase 1 registration after requested changes.'
-        : 'Team submitted Phase 1 registration.',
+      note:
+        'Team submitted Tournament Participation Form for Approval',
     },
   });
 
-  revalidatePath(
-    '/team/dashboard'
-  );
-
-  revalidatePath(
-    '/team/register'
-  );
+  revalidatePath('/team/dashboard');
+  revalidatePath('/team/register');
 
   return {
     success: true,
@@ -525,9 +375,7 @@ export async function submitPhase1(
   };
 }
 
-/* =========================================================
-   DASHBOARD
-   ========================================================= */
+/* ---------- dashboard ---------- */
 
 export async function getTeamDashboardData(
   registrationId?: string
@@ -543,8 +391,6 @@ export async function getTeamDashboardData(
       include: {
         team: {
           include: {
-            documents: true,
-
             registrations: {
               include: {
                 tournament: true,
@@ -554,7 +400,14 @@ export async function getTeamDashboardData(
                     createdAt: 'desc',
                   },
 
-                  take: 5,
+                  /*
+                   * Keep enough history for the dashboard
+                   * while avoiding an unnecessarily large query.
+                   *
+                   * The active registration is selected below
+                   * using the exact registrationId.
+                   */
+                  take: 20,
                 },
               },
 
@@ -572,6 +425,8 @@ export async function getTeamDashboardData(
                 createdAt: 'desc',
               },
             },
+
+            documents: true,
           },
         },
       },
@@ -581,11 +436,7 @@ export async function getTeamDashboardData(
       },
     });
 
-  /* ---------------------------------------------------------
-     ALL REGISTRATIONS
-     --------------------------------------------------------- */
-
-  const registrations =
+  const registrationEntries =
     memberships.flatMap(
       (membership) =>
         membership.team.registrations.map(
@@ -596,98 +447,90 @@ export async function getTeamDashboardData(
         )
     );
 
-  /* ---------------------------------------------------------
-     FIND ACTIVE REGISTRATION
-     --------------------------------------------------------- */
-
-  let active =
-    registrationId
-      ? registrations.find(
-          (item) =>
-            item.registration.id ===
-            registrationId
-        ) ?? null
-      : null;
+  /*
+   * ---------------------------------------------------------
+   * TEAM SWITCHER DATA
+   * ---------------------------------------------------------
+   *
+   * Every registration remains addressable by its own ID.
+   */
+  const teams = registrationEntries.map(
+    ({ team, registration }) => ({
+      registrationId: registration.id,
+      teamId: team.id,
+      teamName: team.name,
+      status: registration.status,
+      phase: registration.phase,
+    })
+  );
 
   /*
-   * If no explicit registration ID exists,
-   * automatically select a single editable Phase 1
-   * registration.
+   * ---------------------------------------------------------
+   * ACTIVE REGISTRATION
+   * ---------------------------------------------------------
+   *
+   * If registrationId is supplied, ONLY that registration
+   * may become active.
    */
-  if (!active) {
+  let active:
+    | {
+        team: (typeof registrationEntries)[number]['team'];
+        registration: (typeof registrationEntries)[number]['registration'];
+      }
+    | null = null;
+
+  if (registrationId) {
+    const selected =
+      registrationEntries.find(
+        (item) =>
+          item.registration.id ===
+          registrationId
+      );
+
+    if (selected) {
+      active = {
+        team: selected.team,
+        registration: selected.registration,
+      };
+    }
+  } else {
     const editable =
-      registrations.filter(
+      registrationEntries.filter(
         (item) =>
           item.registration.phase ===
             'PHASE_1' &&
           (
             item.registration.status ===
-              RegistrationStatus.DRAFT ||
+              'DRAFT' ||
             item.registration.status ===
-              RegistrationStatus.CHANGES_REQUESTED
+              'CHANGES_REQUESTED'
           )
       );
 
-    if (
+    const selected =
       editable.length === 1
-    ) {
-      active = editable[0];
+        ? editable[0]
+        : registrationEntries.length === 1
+          ? registrationEntries[0]
+          : null;
+
+    if (selected) {
+      active = {
+        team: selected.team,
+        registration: selected.registration,
+      };
     }
   }
 
   /*
-   * If there is exactly one registration overall,
-   * use it.
+   * ---------------------------------------------------------
+   * USER NOTIFICATIONS
+   * ---------------------------------------------------------
+   *
+   * These remain account-level notifications.
+   * Registration-specific history is returned separately
+   * below from RegistrationEvent.
    */
-  if (
-    !active &&
-    !registrationId &&
-    registrations.length === 1
-  ) {
-    active = registrations[0];
-  }
-
-  /* ---------------------------------------------------------
-     TEAM SWITCHER DATA
-     --------------------------------------------------------- */
-
-  const teams = memberships
-    .map((membership) => {
-      const registration =
-        membership.team.registrations[0];
-
-      if (!registration) {
-        return null;
-      }
-
-      return {
-        registrationId:
-          registration.id,
-
-        teamId:
-          membership.team.id,
-
-        teamName:
-          membership.team.name,
-
-        status:
-          registration.status,
-
-        phase:
-          registration.phase,
-      };
-    })
-    .filter(
-      (
-        team
-      ): team is NonNullable<typeof team> =>
-        team !== null
-    );
-
-  /* ---------------------------------------------------------
-     USER NOTIFICATIONS
-     --------------------------------------------------------- */
-
   const notifications =
     await prisma.notification.findMany({
       where: {
@@ -701,187 +544,27 @@ export async function getTeamDashboardData(
       take: 20,
     });
 
-  /* ---------------------------------------------------------
-     NO ACTIVE REGISTRATION
-     --------------------------------------------------------- */
-
-  if (!active) {
-    return {
-      teams,
-      notifications,
-      active: null,
-    };
-  }
-
-  /* =========================================================
-     FIXTURES
-     ========================================================= */
-
-  const rawFixtures =
-    await prisma.fixture.findMany({
-      where: {
-        tournamentId:
-          active.registration.tournamentId,
-
-        OR: [
-          {
-            teamAId:
-              active.team.id,
-          },
-
-          {
-            teamBId:
-              active.team.id,
-          },
-        ],
-
-        isPublished: true,
-      },
-
-      include: {
-        venue: true,
-      },
-
-      orderBy: [
-        {
-          kickoffAt: 'asc',
-        },
-
-        {
-          matchNumber: 'asc',
-        },
-      ],
-    });
-
-  /* =========================================================
-     FIND OPPONENT TEAMS
-     ========================================================= */
-
-  const opponentTeamIds =
-    rawFixtures
-      .map((fixture) => {
-        if (
-          fixture.teamAId ===
-          active!.team.id
-        ) {
-          return fixture.teamBId;
-        }
-
-        if (
-          fixture.teamBId ===
-          active!.team.id
-        ) {
-          return fixture.teamAId;
-        }
-
-        return null;
-      })
-      .filter(
-        (id): id is string =>
-          Boolean(id)
-      );
-
-  const opponentTeams =
-    opponentTeamIds.length > 0
-      ? await prisma.team.findMany({
-          where: {
-            id: {
-              in: opponentTeamIds,
-            },
-          },
-
-          select: {
-            id: true,
-            name: true,
-            shortName: true,
-            logoStorageKey: true,
-          },
-        })
-      : [];
-
-  const opponentMap =
-    new Map(
-      opponentTeams.map((team) => [
-        team.id,
-        team,
-      ])
-    );
-
-  /* =========================================================
-     DASHBOARD FIXTURE VIEW MODEL
-     ========================================================= */
-
-  const fixtures =
-    rawFixtures.map((fixture) => {
-      const opponentId =
-        fixture.teamAId ===
-        active!.team.id
-          ? fixture.teamBId
-          : fixture.teamAId;
-
-      return {
-        ...fixture,
-
-        opponent: opponentId
-          ? opponentMap.get(
-              opponentId
-            ) ?? null
-          : null,
-      };
-    });
-
-  /* =========================================================
-     ANNOUNCEMENTS
-     ========================================================= */
-
-  const announcements =
-    await prisma.announcement.findMany({
-      where: {
-        tournamentId:
-          active.registration.tournamentId,
-
-        status: 'PUBLISHED',
-      },
-
-      orderBy: [
-        {
-          publishedAt: 'desc',
-        },
-
-        {
-          createdAt: 'desc',
-        },
-      ],
-
-      take: 10,
-    });
-
-  /* =========================================================
-     RETURN
-     ========================================================= */
+  /*
+   * ---------------------------------------------------------
+   * REGISTRATION UPDATES
+   * ---------------------------------------------------------
+   *
+   * IMPORTANT:
+   *
+   * Only expose events belonging to the exact active
+   * registration. This prevents Team A's history from
+   * appearing while Team B is selected.
+   */
+  const registrationUpdates =
+    active?.registration.events ?? [];
 
   return {
     teams,
-
     notifications,
-
-    active: {
-      team:
-        active.team,
-
-      registration:
-        active.registration,
-
-      fixtures,
-
-      announcements,
-    },
+    registrationUpdates,
+    active,
   };
 }
-
-/* =========================================================
-   CREATE NEW TEAM REGISTRATION
-   ========================================================= */
 
 export async function createNewTeamRegistration() {
   const user = await getUser();
@@ -910,8 +593,7 @@ export async function createNewTeamRegistration() {
       data: {
         teamId: team.id,
         tournamentId: tournament.id,
-        status:
-          RegistrationStatus.DRAFT,
+        status: 'DRAFT',
         phase: 'PHASE_1',
       },
 
@@ -926,37 +608,86 @@ export async function createNewTeamRegistration() {
   };
 }
 
-/* =========================================================
-   PHASE 2 — MANAGER
-   ========================================================= */
-
-export async function saveManagerInfo(
-  formData: FormData,
+export async function resubmitRegistrationById(
   registrationId: string
 ) {
-  const {
-    registration,
-  } =
-    await getRegistrationById(
-      registrationId
-    );
+  const user = await getUser();
+
+  const reg =
+    await prisma.teamRegistration.findUnique({
+      where: {
+        id: registrationId,
+      },
+    });
 
   if (
-    registration.phase !== 'PHASE_2'
+    !reg ||
+    reg.status !== 'CHANGES_REQUESTED'
   ) {
+    throw new Error('Cannot resubmit');
+  }
+
+  const membership =
+    await prisma.teamMembership.findUnique({
+      where: {
+        userId_teamId: {
+          userId: user.id,
+          teamId: reg.teamId,
+        },
+      },
+    });
+
+  if (!membership) {
     throw new Error(
-      'Manager information can only be edited in Phase 2.'
+      'You do not have access to this registration'
     );
   }
 
-  if (
-    registration.status !==
-      RegistrationStatus.DRAFT &&
-    registration.status !==
-      RegistrationStatus.CHANGES_REQUESTED
-  ) {
+  await prisma.teamRegistration.update({
+    where: {
+      id: registrationId,
+    },
+
+    data: {
+      status: 'RESUBMITTED',
+      submittedAt: new Date(),
+    },
+  });
+
+  await prisma.registrationEvent.create({
+    data: {
+      teamRegistrationId:
+        registrationId,
+
+      fromStatus:
+        'CHANGES_REQUESTED',
+
+      toStatus:
+        'RESUBMITTED',
+
+      note:
+        'Team resubmitted after changes',
+    },
+  });
+
+  revalidatePath('/team/dashboard');
+  revalidatePath('/team/register');
+}
+
+/* ---------- phase 2: manager ---------- */
+
+export async function saveManagerInfo(
+  formData: FormData,
+  registrationId?: string
+) {
+  const { registration } =
+    await getOrCreateDraftRegistration(
+      registrationId
+    );
+
+  if (registration.phase !== 'PHASE_2') {
     throw new Error(
-      'This registration cannot be edited in its current status.'
+      'Manager information can only be edited in Phase 2'
     );
   }
 
@@ -968,60 +699,28 @@ export async function saveManagerInfo(
 
       data: {
         managerName:
-          String(
-            formData.get(
-              'managerName'
-            ) || ''
-          ).trim() || null,
+          (formData.get('managerName') as string) ||
+          null,
 
         managerPosition:
-          String(
-            formData.get(
-              'managerPosition'
-            ) || ''
-          ).trim() || null,
+          (formData.get('managerPosition') as string) ||
+          null,
 
         managerEmail:
-          String(
-            formData.get(
-              'managerEmail'
-            ) || ''
-          ).trim() || null,
+          (formData.get('managerEmail') as string) ||
+          null,
 
         managerPhone:
-          String(
-            formData.get(
-              'managerPhone'
-            ) || ''
-          ).trim() || null,
+          (formData.get('managerPhone') as string) ||
+          null,
 
         managerCountry:
-          String(
-            formData.get(
-              'managerCountry'
-            ) || ''
-          ).trim() || null,
+          (formData.get('managerCountry') as string) ||
+          null,
 
         assistantManagerName:
-          String(
-            formData.get(
-              'assistantManagerName'
-            ) || ''
-          ).trim() || null,
-
-        assistantManagerEmail:
-          String(
-            formData.get(
-              'assistantManagerEmail'
-            ) || ''
-          ).trim() || null,
-
-        assistantManagerPhone:
-          String(
-            formData.get(
-              'assistantManagerPhone'
-            ) || ''
-          ).trim() || null,
+          (formData.get('assistantManagerName') as string) ||
+          null,
       },
     });
 
@@ -1030,11 +729,7 @@ export async function saveManagerInfo(
   );
 
   revalidatePath(
-    '/team/register/officials'
-  );
-
-  revalidatePath(
-    '/team/register/review'
+    '/team/register'
   );
 
   revalidatePath(
@@ -1047,37 +742,20 @@ export async function saveManagerInfo(
   };
 }
 
-/* =========================================================
-   PHASE 2 — OFFICIALS
-   ========================================================= */
+/* ---------- phase 2: officials ---------- */
 
 export async function saveOfficialsInfo(
   formData: FormData,
-  registrationId: string
+  registrationId?: string
 ) {
-  const {
-    registration,
-  } =
-    await getRegistrationById(
+  const { registration } =
+    await getOrCreateDraftRegistration(
       registrationId
     );
 
-  if (
-    registration.phase !== 'PHASE_2'
-  ) {
+  if (registration.phase !== 'PHASE_2') {
     throw new Error(
-      'Officials can only be edited in Phase 2.'
-    );
-  }
-
-  if (
-    registration.status !==
-      RegistrationStatus.DRAFT &&
-    registration.status !==
-      RegistrationStatus.CHANGES_REQUESTED
-  ) {
-    throw new Error(
-      'This registration cannot be edited in its current status.'
+      'Officials can only be edited in Phase 2'
     );
   }
 
@@ -1089,116 +767,68 @@ export async function saveOfficialsInfo(
 
       data: {
         managerName:
-          String(
-            formData.get(
-              'managerName'
-            ) || ''
-          ).trim() || null,
+          (formData.get('managerName') as string) ||
+          null,
 
         managerEmail:
-          String(
-            formData.get(
-              'managerEmail'
-            ) || ''
-          ).trim() || null,
+          (formData.get('managerEmail') as string) ||
+          null,
 
         managerPhone:
-          String(
-            formData.get(
-              'managerPhone'
-            ) || ''
-          ).trim() || null,
+          (formData.get('managerPhone') as string) ||
+          null,
 
         managerIdNumber:
-          String(
-            formData.get(
-              'managerIdNumber'
-            ) || ''
-          ).trim() || null,
+          (formData.get('managerIdNumber') as string) ||
+          null,
 
         coachName:
-          String(
-            formData.get(
-              'coachName'
-            ) || ''
-          ).trim() || null,
+          (formData.get('coachName') as string) ||
+          null,
 
         coachEmail:
-          String(
-            formData.get(
-              'coachEmail'
-            ) || ''
-          ).trim() || null,
+          (formData.get('coachEmail') as string) ||
+          null,
 
         coachPhone:
-          String(
-            formData.get(
-              'coachPhone'
-            ) || ''
-          ).trim() || null,
+          (formData.get('coachPhone') as string) ||
+          null,
 
         coachIdNumber:
-          String(
-            formData.get(
-              'coachIdNumber'
-            ) || ''
-          ).trim() || null,
+          (formData.get('coachIdNumber') as string) ||
+          null,
 
         medicName:
-          String(
-            formData.get(
-              'medicName'
-            ) || ''
-          ).trim() || null,
+          (formData.get('medicName') as string) ||
+          null,
 
         medicEmail:
-          String(
-            formData.get(
-              'medicEmail'
-            ) || ''
-          ).trim() || null,
+          (formData.get('medicEmail') as string) ||
+          null,
 
         medicPhone:
-          String(
-            formData.get(
-              'medicPhone'
-            ) || ''
-          ).trim() || null,
+          (formData.get('medicPhone') as string) ||
+          null,
 
         medicIdNumber:
-          String(
-            formData.get(
-              'medicIdNumber'
-            ) || ''
-          ).trim() || null,
+          (formData.get('medicIdNumber') as string) ||
+          null,
 
         officialName:
-          String(
-            formData.get(
-              'officialName'
-            ) || ''
-          ).trim() || null,
+          (formData.get('officialName') as string) ||
+          null,
 
         officialEmail:
-          String(
-            formData.get(
-              'officialEmail'
-            ) || ''
-          ).trim() || null,
+          (formData.get('officialEmail') as string) ||
+          null,
 
         officialPhone:
-          String(
-            formData.get(
-              'officialPhone'
-            ) || ''
-          ).trim() || null,
+          (formData.get('officialPhone') as string) ||
+          null,
 
         officialIdNumber:
-          String(
-            formData.get(
-              'officialIdNumber'
-            ) || ''
-          ).trim() || null,
+          (formData.get('officialIdNumber') as string) ||
+          null,
       },
     });
 
@@ -1207,11 +837,7 @@ export async function saveOfficialsInfo(
   );
 
   revalidatePath(
-    '/team/register/players'
-  );
-
-  revalidatePath(
-    '/team/register/review'
+    '/team/register'
   );
 
   revalidatePath(
@@ -1224,28 +850,15 @@ export async function saveOfficialsInfo(
   };
 }
 
-/* =========================================================
-   PLAYERS — GET
-   ========================================================= */
+/* ---------- players ---------- */
 
 export async function getPlayers(
-  registrationId: string
+  registrationId?: string
 ) {
-  const {
-    team,
-    registration,
-  } =
-    await getRegistrationById(
+  const { team, registration } =
+    await getOrCreateDraftRegistration(
       registrationId
     );
-
-  if (
-    registration.phase !== 'PHASE_2'
-  ) {
-    throw new Error(
-      'Players are only available in Phase 2.'
-    );
-  }
 
   const players =
     await prisma.player.findMany({
@@ -1270,38 +883,18 @@ export async function getPlayers(
   };
 }
 
-/* =========================================================
-   PLAYERS — ADD
-   ========================================================= */
-
 export async function addPlayer(
   formData: FormData,
-  registrationId: string
+  registrationId?: string
 ) {
-  const {
-    team,
-    registration,
-  } =
-    await getRegistrationById(
+  const { team, registration } =
+    await getOrCreateDraftRegistration(
       registrationId
     );
 
-  if (
-    registration.phase !== 'PHASE_2'
-  ) {
+  if (registration.phase !== 'PHASE_2') {
     throw new Error(
-      'Players can only be added in Phase 2.'
-    );
-  }
-
-  if (
-    registration.status !==
-      RegistrationStatus.DRAFT &&
-    registration.status !==
-      RegistrationStatus.CHANGES_REQUESTED
-  ) {
-    throw new Error(
-      'Players cannot be edited in the current registration status.'
+      'Players can only be added in Phase 2'
     );
   }
 
@@ -1314,77 +907,54 @@ export async function addPlayer(
 
   if (currentCount >= 10) {
     throw new Error(
-      'Maximum 10 players allowed.'
+      'Maximum 10 players allowed'
     );
   }
 
-  const firstName =
-    String(
-      formData.get('firstName') || ''
-    ).trim();
+  const firstName = String(
+    formData.get('firstName') || ''
+  ).trim();
 
-  const lastName =
-    String(
-      formData.get('lastName') || ''
-    ).trim();
+  const lastName = String(
+    formData.get('lastName') || ''
+  ).trim();
 
-  const idNumber =
-    String(
-      formData.get('idNumber') || ''
-    ).trim();
+  const idNumber = String(
+    formData.get('idNumber') || ''
+  ).trim();
 
-  const position =
-    String(
-      formData.get('position') || ''
-    )
-      .trim()
-      .toUpperCase();
+  const position = String(
+    formData.get('position') || ''
+  ).toUpperCase();
 
-  const jerseyNumber =
-    Number(
-      formData.get('jerseyNumber')
-    );
+  const jerseyNumber = Number(
+    formData.get('jerseyNumber')
+  );
 
   if (!firstName) {
     throw new Error(
-      'First name is required.'
+      'First name is required'
     );
   }
 
   if (!lastName) {
     throw new Error(
-      'Last name is required.'
+      'Last name is required'
     );
   }
 
   if (!idNumber) {
     throw new Error(
-      'ID number is required.'
+      'ID number is required'
     );
   }
 
   if (
-    !Number.isInteger(
-      jerseyNumber
-    ) ||
+    !Number.isInteger(jerseyNumber) ||
     jerseyNumber < 1
   ) {
     throw new Error(
-      'Valid jersey number is required.'
-    );
-  }
-
-  const existingJersey =
-    await prisma.player.findFirst({
-      where: {
-        teamId: team.id,
-        jerseyNumber,
-      },
-    });
-
-  if (existingJersey) {
-    throw new Error(
-      `Jersey number ${jerseyNumber} is already in use.`
+      'Valid jersey number is required'
     );
   }
 
@@ -1424,43 +994,19 @@ export async function addPlayer(
     success: true,
     player,
     teamId: team.id,
+    registrationId:
+      registration.id,
   };
 }
 
-/* =========================================================
-   PLAYERS — REMOVE
-   ========================================================= */
-
 export async function removePlayer(
   playerId: string,
-  registrationId: string
+  registrationId?: string
 ) {
-  const {
-    team,
-    registration,
-  } =
-    await getRegistrationById(
+  const { team } =
+    await getOrCreateDraftRegistration(
       registrationId
     );
-
-  if (
-    registration.phase !== 'PHASE_2'
-  ) {
-    throw new Error(
-      'Players can only be edited in Phase 2.'
-    );
-  }
-
-  if (
-    registration.status !==
-      RegistrationStatus.DRAFT &&
-    registration.status !==
-      RegistrationStatus.CHANGES_REQUESTED
-  ) {
-    throw new Error(
-      'Players cannot be edited in the current registration status.'
-    );
-  }
 
   await prisma.player.deleteMany({
     where: {
@@ -1482,9 +1028,7 @@ export async function removePlayer(
   };
 }
 
-/* =========================================================
-   DOCUMENTS
-   ========================================================= */
+/* ---------- documents ---------- */
 
 export async function saveDocumentRecord(
   data: {
@@ -1496,39 +1040,24 @@ export async function saveDocumentRecord(
     mimeType: string;
     size: number;
   },
-  registrationId: string
+  registrationId?: string
 ) {
-  const {
-    team,
-    registration,
-  } =
-    await getRegistrationById(
+  const { team, registration } =
+    await getOrCreateDraftRegistration(
       registrationId
     );
 
-  if (
-    registration.phase !== 'PHASE_2'
-  ) {
+  if (registration.phase !== 'PHASE_2') {
     throw new Error(
-      'Documents can only be uploaded in Phase 2.'
+      'Documents can only be uploaded in Phase 2'
     );
   }
 
-  if (
-    registration.status !==
-      RegistrationStatus.DRAFT &&
-    registration.status !==
-      RegistrationStatus.CHANGES_REQUESTED
-  ) {
-    throw new Error(
-      'Documents cannot be edited in the current status.'
-    );
-  }
-
-  /* -------------------------------------------------------
-     PLAYER DOCUMENT
-     ------------------------------------------------------- */
-
+  /*
+   * ---------------------------------------------------------
+   * PLAYER DOCUMENT VALIDATION
+   * ---------------------------------------------------------
+   */
   if (data.playerId) {
     const player =
       await prisma.player.findFirst({
@@ -1540,15 +1069,16 @@ export async function saveDocumentRecord(
 
     if (!player) {
       throw new Error(
-        'Player not found.'
+        'Player not found'
       );
     }
   }
 
-  /* -------------------------------------------------------
-     OFFICIAL DOCUMENT
-     ------------------------------------------------------- */
-
+  /*
+   * ---------------------------------------------------------
+   * OFFICIAL DOCUMENT VALIDATION
+   * ---------------------------------------------------------
+   */
   if (
     !data.playerId &&
     data.officialRole
@@ -1566,7 +1096,7 @@ export async function saveDocumentRecord(
       )
     ) {
       throw new Error(
-        'Invalid official role.'
+        'Invalid official role'
       );
     }
 
@@ -1587,25 +1117,24 @@ export async function saveDocumentRecord(
       )
     ) {
       throw new Error(
-        'Invalid official document type.'
+        'Invalid official document type'
       );
     }
   }
 
-  /* -------------------------------------------------------
-     CREATE DOCUMENT
-     ------------------------------------------------------- */
-
-  const document =
+  /*
+   * ---------------------------------------------------------
+   * CREATE DOCUMENT RECORD
+   * ---------------------------------------------------------
+   */
+  const doc =
     await prisma.playerDocument.create({
       data: {
         playerId:
-          data.playerId ||
-          null,
+          data.playerId || null,
 
         officialRole:
-          data.officialRole ||
-          null,
+          data.officialRole || null,
 
         documentType:
           data.documentType,
@@ -1624,40 +1153,43 @@ export async function saveDocumentRecord(
       },
     });
 
-  /* -------------------------------------------------------
-     MAP OFFICIAL DOCUMENT TO REGISTRATION
-     ------------------------------------------------------- */
-
+  /*
+   * ---------------------------------------------------------
+   * OFFICIAL STORAGE KEY
+   * ---------------------------------------------------------
+   */
   if (
     !data.playerId &&
     data.officialRole
   ) {
-    const officialFieldMap:
-      Record<string, string> = {
-        'manager:manager_id_doc':
-          'managerIdDocKey',
+    const officialFieldMap: Record<
+      string,
+      string
+    > = {
+      'manager:manager_id_doc':
+        'managerIdDocKey',
 
-        'manager:manager_photo':
-          'managerPhotoKey',
+      'manager:manager_photo':
+        'managerPhotoKey',
 
-        'coach:coach_id_doc':
-          'coachIdDocKey',
+      'coach:coach_id_doc':
+        'coachIdDocKey',
 
-        'coach:coach_photo':
-          'coachPhotoKey',
+      'coach:coach_photo':
+        'coachPhotoKey',
 
-        'medic:medic_id_doc':
-          'medicIdDocKey',
+      'medic:medic_id_doc':
+        'medicIdDocKey',
 
-        'medic:medic_photo':
-          'medicPhotoKey',
+      'medic:medic_photo':
+        'medicPhotoKey',
 
-        'official:official_id_doc':
-          'officialIdDocKey',
+      'official:official_id_doc':
+        'officialIdDocKey',
 
-        'official:official_photo':
-          'officialPhotoKey',
-      };
+      'official:official_photo':
+        'officialPhotoKey',
+    };
 
     const field =
       officialFieldMap[
@@ -1696,22 +1228,17 @@ export async function saveDocumentRecord(
 
   return {
     success: true,
-    document,
+    document: doc,
   };
 }
 
-/* =========================================================
-   REVIEW DATA
-   ========================================================= */
+/* ---------- review ---------- */
 
 export async function getReviewData(
-  registrationId: string
+  registrationId?: string
 ) {
-  const {
-    team,
-    registration,
-  } =
-    await getRegistrationById(
+  const { team, registration } =
+    await getOrCreateDraftRegistration(
       registrationId
     );
 
@@ -1722,29 +1249,24 @@ export async function getReviewData(
       },
 
       include: {
-        documents: true,
-
         players: {
           include: {
             documents: true,
           },
-
-          orderBy: {
-            createdAt: 'desc',
-          },
         },
 
-        registrations: {
-          orderBy: {
-            createdAt: 'desc',
-          },
-        },
+        registrations: true,
       },
     });
 
+  /*
+   * ---------------------------------------------------------
+   * PLAYER DOCUMENTS
+   * ---------------------------------------------------------
+   */
   const playerIds =
     fullTeam?.players?.map(
-      (player) => player.id
+      (p) => p.id
     ) ?? [];
 
   const playerDocs =
@@ -1758,19 +1280,25 @@ export async function getReviewData(
         })
       : [];
 
+  /*
+   * ---------------------------------------------------------
+   * OFFICIAL DOCUMENTS
+   * ---------------------------------------------------------
+   */
   const officialStorageKeys = [
     registration.managerIdDocKey,
     registration.managerPhotoKey,
+
     registration.coachIdDocKey,
     registration.coachPhotoKey,
+
     registration.medicIdDocKey,
     registration.medicPhotoKey,
+
     registration.officialIdDocKey,
     registration.officialPhotoKey,
   ].filter(
-    (
-      key
-    ): key is string =>
+    (key): key is string =>
       Boolean(key)
   );
 
@@ -1785,7 +1313,7 @@ export async function getReviewData(
         })
       : [];
 
-  const allDocuments = [
+  const teamDocs = [
     ...playerDocs,
     ...officialDocs,
   ];
@@ -1796,42 +1324,44 @@ export async function getReviewData(
     registration,
 
     totalDocCount:
-      allDocuments.length,
+      teamDocs.length,
   };
 }
 
-/* =========================================================
-   FINAL REGISTRATION SUBMISSION
-   ========================================================= */
+/* ---------- phase 2 submission ---------- */
 
 export async function submitRegistration(
-  registrationId: string
+  registrationId?: string
 ) {
-  const {
-    team,
-    registration,
-  } =
-    await getRegistrationById(
+  const { team, registration } =
+    await getOrCreateDraftRegistration(
       registrationId
     );
 
-  if (
-    registration.phase !== 'PHASE_2'
-  ) {
+  if (registration.phase !== 'PHASE_2') {
     return {
-      error: 'Not in Phase 2.',
+      error: 'Not in Phase 2',
     };
   }
 
+  /*
+   * ---------------------------------------------------------
+   * DETERMINE SUBMISSION TYPE
+   * ---------------------------------------------------------
+   */
   const isResubmission =
     registration.status ===
-    RegistrationStatus.CHANGES_REQUESTED;
+    'CHANGES_REQUESTED';
+
+  const allowedStatuses = [
+    'DRAFT',
+    'CHANGES_REQUESTED',
+  ];
 
   if (
-    registration.status !==
-      RegistrationStatus.DRAFT &&
-    registration.status !==
-      RegistrationStatus.CHANGES_REQUESTED
+    !allowedStatuses.includes(
+      registration.status
+    )
   ) {
     return {
       error:
@@ -1839,30 +1369,11 @@ export async function submitRegistration(
     };
   }
 
-  /* -------------------------------------------------------
-     OFFICIALS
-     ------------------------------------------------------- */
-
-  const officialNames = [
-    registration.managerName,
-    registration.coachName,
-    registration.medicName,
-    registration.officialName,
-  ].filter(Boolean);
-
-  if (
-    officialNames.length !== 4
-  ) {
-    return {
-      error:
-        'Complete all four official positions before submitting.',
-    };
-  }
-
-  /* -------------------------------------------------------
-     PLAYERS
-     ------------------------------------------------------- */
-
+  /*
+   * ---------------------------------------------------------
+   * VALIDATE PLAYERS
+   * ---------------------------------------------------------
+   */
   const players =
     await prisma.player.findMany({
       where: {
@@ -1884,16 +1395,17 @@ export async function submitRegistration(
     };
   }
 
-  /* -------------------------------------------------------
-     PLAYER DOCUMENTS
-     ------------------------------------------------------- */
-
+  /*
+   * ---------------------------------------------------------
+   * VALIDATE PLAYER DOCUMENTS
+   * ---------------------------------------------------------
+   */
   const playerIds =
     players.map(
       (player) => player.id
     );
 
-  const playerDocumentCount =
+  const hasPlayerDocs =
     playerIds.length > 0
       ? await prisma.playerDocument.count({
           where: {
@@ -1904,74 +1416,44 @@ export async function submitRegistration(
         })
       : 0;
 
-  if (
-    playerDocumentCount === 0
-  ) {
+  if (hasPlayerDocs === 0) {
     return {
       error:
         'Upload at least one player document before submitting.',
     };
   }
 
-  /* -------------------------------------------------------
-     STATUS
-     ------------------------------------------------------- */
-
+  /*
+   * ---------------------------------------------------------
+   * STATUS
+   * ---------------------------------------------------------
+   */
   const newStatus =
     isResubmission
-      ? RegistrationStatus.RESUBMITTED
-      : RegistrationStatus.SUBMITTED;
+      ? 'RESUBMITTED'
+      : 'SUBMITTED';
 
   const fromStatus =
     isResubmission
-      ? RegistrationStatus.CHANGES_REQUESTED
-      : RegistrationStatus.DRAFT;
+      ? 'CHANGES_REQUESTED'
+      : 'DRAFT';
 
   const eventNote =
     isResubmission
-      ? 'Team resubmitted registration after making requested changes.'
-      : 'Team submitted registration for final review.';
+      ? 'Team resubmitted registration after making requested changes'
+      : 'Team submitted Team Details Submission for final review';
 
-  /* -------------------------------------------------------
-     PAYMENT
-     
-     Payment becomes required only after Phase 2
-     submission.
-
-     If payment was already approved, preserve that
-     approval when the team resubmits after changes.
-
-     Otherwise initialize payment as PENDING.
-     ------------------------------------------------------- */
-
-  const paymentStatus =
-    registration.paymentStatus ===
-    'APPROVED'
-      ? 'APPROVED'
-      : 'PENDING';
-
-  const paymentAmount =
-    registration.paymentAmount ??
-    registration.tournament
-      .registrationFeeAmount ??
-    null;
-
-  const paymentDeadline =
-    registration.paymentDeadline ??
-    registration.tournament
-      .paymentDeadline ??
-    null;
-
-  const paymentRejectionReason =
-    registration.paymentStatus ===
-    'APPROVED'
-      ? null
-      : registration.paymentRejectionReason;
-
-  /* -------------------------------------------------------
-     UPDATE SAME REGISTRATION
-     ------------------------------------------------------- */
-
+  /*
+   * ---------------------------------------------------------
+   * UPDATE REGISTRATION
+   *
+   * Payment is deliberately NOT requested here.
+   *
+   * Phase 2 submission goes to tournament administration.
+   *
+   * Admin must explicitly call sendRegistrationToPayment().
+   * ---------------------------------------------------------
+   */
   const updated =
     await prisma.teamRegistration.update({
       where: {
@@ -1979,32 +1461,21 @@ export async function submitRegistration(
       },
 
       data: {
-        status:
-          newStatus,
+        status: newStatus,
 
         submittedAt:
           new Date(),
 
         reviewedAt:
           null,
-
-        /*
-         * Payment workflow starts here.
-         */
-        paymentStatus,
-
-        paymentAmount,
-
-        paymentDeadline,
-
-        paymentRejectionReason,
       },
     });
 
-  /* -------------------------------------------------------
-     REGISTRATION EVENT
-     ------------------------------------------------------- */
-
+  /*
+   * ---------------------------------------------------------
+   * REGISTRATION EVENT
+   * ---------------------------------------------------------
+   */
   await prisma.registrationEvent.create({
     data: {
       teamRegistrationId:
@@ -2020,10 +1491,11 @@ export async function submitRegistration(
     },
   });
 
-  /* -------------------------------------------------------
-     REFRESH TEAM PAGES
-     ------------------------------------------------------- */
-
+  /*
+   * ---------------------------------------------------------
+   * REVALIDATE
+   * ---------------------------------------------------------
+   */
   revalidatePath(
     '/team/dashboard'
   );
@@ -2054,28 +1526,18 @@ export async function submitRegistration(
   };
 }
 
-/* =========================================================
-   PHASE 1 — SAVE + SUBMIT
-   ========================================================= */
-
 export async function saveAndSubmitPhase1(
   formData: FormData,
   registrationId?: string
 ) {
-  /*
-   * CRITICAL:
-   *
-   * The SAME registrationId is passed to both operations.
-   * This prevents a multiple-team user from saving one
-   * team and submitting another.
-   */
+  'use server';
 
   await saveTeamInfo(
     formData,
     registrationId
   );
 
-  return submitPhase1(
+  return await submitPhase1(
     registrationId
   );
 }

@@ -1,3 +1,4 @@
+
 'use server';
 
 import {
@@ -473,23 +474,112 @@ export async function submitPaymentReceipt(
 }
 
 /* =========================================================
-   TEAM — VIEW RECEIPT
+   VIEW PAYMENT RECEIPT
 ========================================================= */
 
 /**
  * Generate a temporary signed URL for the private
  * payment receipt.
  *
- * The registration is verified BEFORE the R2 URL is
- * generated.
+ * Access is allowed for:
+ *
+ * 1. Team members belonging to the registration's team
+ * 2. TOURNAMENT_ADMIN
+ * 3. SUPER_ADMIN
+ *
+ * The registration ID is always used to locate the
+ * exact receipt. The client never supplies an arbitrary
+ * R2 object key.
  */
 export async function getPaymentReceiptUrl(
   registrationId: string
 ) {
-  const { registration } =
-    await getRegistrationAccess(
-      registrationId
+  const session = await auth();
+
+  if (!session?.user?.email) {
+    throw new Error('Unauthorized');
+  }
+
+  const user =
+    await prisma.user.findUnique({
+      where: {
+        email: session.user.email,
+      },
+
+      select: {
+        id: true,
+        email: true,
+        role: true,
+      },
+    });
+
+  if (!user) {
+    throw new Error('User not found.');
+  }
+
+  /*
+   * Fetch the exact registration.
+   */
+  const registration =
+    await prisma.teamRegistration.findUnique({
+      where: {
+        id: registrationId,
+      },
+
+      select: {
+        id: true,
+        teamId: true,
+        tournamentId: true,
+
+        paymentReceiptKey: true,
+        paymentReceiptName: true,
+        paymentReceiptMimeType: true,
+
+        team: {
+          select: {
+            members: {
+              where: {
+                userId: user.id,
+              },
+
+              select: {
+                id: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+  if (!registration) {
+    throw new Error(
+      'Registration not found.'
     );
+  }
+
+  /*
+   * Administrators may view payment receipts
+   * from the admin registration review screen.
+   */
+  const isAdmin =
+    user.role === 'TOURNAMENT_ADMIN' ||
+    user.role === 'SUPER_ADMIN';
+
+  /*
+   * Team members may only view receipts belonging
+   * to their own team.
+   */
+  const isTeamMember =
+    registration.team.members.length > 0;
+
+  if (
+    !isAdmin &&
+    !isTeamMember
+  ) {
+    throw new Error(
+      'You do not have access to this payment receipt.'
+    );
+  }
 
   if (
     !registration.paymentReceiptKey
@@ -499,6 +589,14 @@ export async function getPaymentReceiptUrl(
     );
   }
 
+  /*
+   * The receipt must be inside the exact
+   * tournament/team payment-receipts directory.
+   *
+   * This prevents an authenticated user or admin
+   * from turning this action into an arbitrary
+   * R2 object downloader.
+   */
   const expectedPrefix =
     [
       'tournaments',
@@ -518,6 +616,9 @@ export async function getPaymentReceiptUrl(
     );
   }
 
+  /*
+   * Generate a temporary signed GET URL.
+   */
   const command =
     new GetObjectCommand({
       Bucket:
